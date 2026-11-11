@@ -1,0 +1,2581 @@
+<!DOCTYPE html>
+<title>Pulse of Night — 5일차 프로토타입</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600&display=swap">
+<style>/* playtest.css */
+/* playtest.css — 기록 막대, 설문, 기록 창, 튜닝 패널. 게임마다 고치지 않는다. */
+:root {
+  --pt-surface: #ffffff;
+  --pt-ink: #1a1c22;
+  --pt-muted: #5c6270;
+  --pt-line: #d6dae3;
+  --pt-accent: #2f52cf;
+  --pt-accent-ink: #ffffff;
+  --pt-chip: #eef1f7;
+  --pt-scrim: rgba(18, 20, 26, 0.55);
+  --pt-changed: #9a5b00;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --pt-surface: #1a1d24; --pt-ink: #e8eaf0; --pt-muted: #a2a8b6; --pt-line: #2e333e;
+    --pt-accent: #8aa0ff; --pt-accent-ink: #0d1120; --pt-chip: #242937; --pt-scrim: rgba(0, 0, 0, 0.62); --pt-changed: #f0b45a;
+  }
+}
+:root[data-theme="dark"] {
+  --pt-surface: #1a1d24; --pt-ink: #e8eaf0; --pt-muted: #a2a8b6; --pt-line: #2e333e;
+  --pt-accent: #8aa0ff; --pt-accent-ink: #0d1120; --pt-chip: #242937; --pt-scrim: rgba(0, 0, 0, 0.62); --pt-changed: #f0b45a;
+}
+
+/* 아티팩트 뼈대에는 이 규칙이 있지만 더블클릭으로 연 play.html에는 없다. 둘 다에서 숨김이 먹게 한다 */
+[hidden] { display: none !important; }
+
+.pt-bar {
+  position: fixed; z-index: 40;
+  top: calc(8px + env(safe-area-inset-top, 0px));
+  right: calc(8px + env(safe-area-inset-right, 0px));
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end;
+  max-width: calc(100vw - 16px);
+}
+.pt-btn {
+  font: inherit; font-size: 13px; line-height: 1;
+  padding: 8px 12px; min-height: 34px;
+  border-radius: 8px; border: 1px solid var(--pt-line);
+  background: var(--pt-surface); color: var(--pt-ink); cursor: pointer;
+}
+.pt-btn:hover { border-color: var(--pt-muted); }
+.pt-btn:focus-visible, .pt-choice:focus-visible, .pt-tune input:focus-visible, .pt-card textarea:focus-visible, .pt-card input:focus-visible, .pt-card select:focus-visible {
+  outline: 2px solid var(--pt-accent); outline-offset: 2px;
+}
+.pt-primary { background: var(--pt-accent); border-color: var(--pt-accent); color: var(--pt-accent-ink); }
+.pt-toast { font-size: 12px; color: var(--pt-muted); background: var(--pt-surface); border-radius: 6px; padding: 0 6px; }
+.pt-toast:empty { display: none; }
+
+.pt-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  background: var(--pt-scrim);
+  display: grid; place-items: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  overflow-y: auto;
+}
+.pt-card {
+  width: min(440px, 100%);
+  background: var(--pt-surface); color: var(--pt-ink);
+  border: 1px solid var(--pt-line); border-radius: 12px;
+  padding: 20px; display: grid; gap: 10px;
+}
+.pt-card h2, .pt-tune h2 { margin: 0; font-size: 18px; line-height: 1.3; text-wrap: balance; }
+.pt-sub { margin: 0; font-size: 13px; color: var(--pt-muted); line-height: 1.5; }
+.pt-q { margin: 6px 0 0; font-size: 14px; font-weight: 600; display: block; }
+.pt-scale { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.pt-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pt-choice {
+  font: inherit; font-size: 15px; min-height: 42px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--pt-line); background: var(--pt-chip); color: var(--pt-ink);
+  font-variant-numeric: tabular-nums;
+}
+.pt-choice[aria-pressed="true"] { background: var(--pt-accent); border-color: var(--pt-accent); color: var(--pt-accent-ink); }
+.pt-ends { display: flex; justify-content: space-between; font-size: 12px; color: var(--pt-muted); }
+.pt-card textarea, .pt-card input[type="text"], .pt-card select {
+  font: inherit; font-size: 14px; width: 100%; box-sizing: border-box;
+  padding: 8px 10px; border-radius: 8px; border: 1px solid var(--pt-line);
+  background: var(--pt-surface); color: var(--pt-ink); resize: vertical;
+}
+.pt-extra { display: grid; gap: 6px; }
+.pt-extra:empty { display: none; }
+.pt-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 6px; }
+
+.pt-tester-label { display: block; font-size: 13px; margin-bottom: 4px; }
+#pt-tester {
+  font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 8px; width: min(220px, 100%); box-sizing: border-box;
+  border: 1px solid var(--pt-line); background: var(--pt-surface); color: var(--pt-ink);
+}
+
+.pt-tune {
+  position: fixed; z-index: 45;
+  top: calc(50px + env(safe-area-inset-top, 0px));
+  right: calc(8px + env(safe-area-inset-right, 0px));
+  bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  width: min(320px, calc(100vw - 16px)); box-sizing: border-box;
+  overflow-y: auto;
+  background: var(--pt-surface); color: var(--pt-ink);
+  border: 1px solid var(--pt-line); border-radius: 12px;
+  padding: 16px; display: grid; gap: 10px; align-content: start;
+}
+.pt-tune-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pt-tune-list { display: grid; gap: 14px; }
+.pt-tune-row { display: grid; gap: 4px; }
+.pt-tune-head { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 600; }
+.pt-tune-val { font-variant-numeric: tabular-nums; font-weight: 600; }
+.pt-tune-val.pt-changed { color: var(--pt-changed); }
+.pt-tune input[type="range"] { width: 100%; accent-color: var(--pt-accent); }
+.pt-tune-meta { margin: 0; font-size: 11px; color: var(--pt-muted); font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
+.pt-tune-why { margin: 0; font-size: 12px; color: var(--pt-muted); line-height: 1.5; }
+
+@media (prefers-reduced-motion: reduce) { .pt-overlay, .pt-tune { scroll-behavior: auto; } }
+
+</style>
+<style>
+  /* 그레이박스: 도형만, 소리 없음. 게임 판은 밝은 화면에서도 어두운 쪽 색을 쓰되 값은 둘 다 따로 둔다 */
+  :root {
+    --bg: #e9ebf0;
+    --fg: #191b21;
+    --muted: #5b6170;
+    --line: #cfd3dc;
+    --game-bg: #15171c;
+    --game-fg: #eceef3;
+    --game-muted: #a3a9b6;
+    --game-accent: #7fa2ff;
+    --game-item: #f0a35e;
+    --game-soft: #2b2f38;
+    --game-floor: #5f646f;
+    --game-wall: #d9dce3;
+    --game-mem-floor: #2a2d35;
+    --game-mem-wall: #5a606c;
+    --game-glass: #7cc7d9;
+    --game-danger: #ef5a5a;
+    --game-odd: #e879f9;
+    --game-shade: rgba(0,0,0,0.45);
+    --game-toast: rgba(10,11,14,.82);
+    --font-ui: "IBM Plex Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d0f13; --fg: #e7e9ef; --muted: #9ba2b1; --line: #2a2f3a;
+      --game-bg: #08090c; --game-fg: #e7e9ef; --game-muted: #969cab; --game-accent: #8aa0ff; --game-item: #fb923c;
+      --game-soft: #1f232b; --game-floor: #50545e; --game-wall: #c9ccd4; --game-mem-floor: #1d2026; --game-mem-wall: #474c57;
+      --game-glass: #6bb8ca; --game-danger: #f26d6d; --game-odd: #f0abfc; --game-shade: rgba(0,0,0,0.55); --game-toast: rgba(6,7,9,.86);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d0f13; --fg: #e7e9ef; --muted: #9ba2b1; --line: #2a2f3a;
+    --game-bg: #08090c; --game-fg: #e7e9ef; --game-muted: #969cab; --game-accent: #8aa0ff; --game-item: #fb923c;
+    --game-soft: #1f232b; --game-floor: #50545e; --game-wall: #c9ccd4; --game-mem-floor: #1d2026; --game-mem-wall: #474c57;
+    --game-glass: #6bb8ca; --game-danger: #f26d6d; --game-odd: #f0abfc; --game-shade: rgba(0,0,0,0.55); --game-toast: rgba(6,7,9,.86);
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); }
+  .shell {
+    min-height: 100%; box-sizing: border-box;
+    display: grid; gap: 12px; align-content: start; justify-items: center;
+    padding-block: 16px 24px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .top { width: min(960px, 100%); display: flex; align-items: baseline; gap: 10px; padding-right: 120px; box-sizing: border-box; min-height: 34px; }
+  .name { margin: 0; font-size: 18px; font-weight: 600; text-wrap: balance; }
+  .ver { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+  .stage {
+    position: relative; width: min(960px, 100%); aspect-ratio: 16 / 10; max-width: 100%;
+    background: var(--game-bg); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+    touch-action: none; color: var(--game-fg);
+  }
+  #game { display: block; width: 100%; height: 100%; cursor: crosshair; }
+  .hud {
+    position: absolute; top: 8px; left: 10px; right: 10px; display: flex; justify-content: space-between; gap: 12px;
+    font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; pointer-events: none; line-height: 1.45;
+    text-shadow: 0 1px 2px rgba(0,0,0,.8);
+  }
+  .hud .r { text-align: right; color: var(--game-muted); font-weight: 400; max-width: 46%; }
+  .sub {
+    position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); max-width: 90%;
+    font-size: 14px; text-align: center; color: var(--game-fg); pointer-events: none; text-shadow: 0 1px 3px #000;
+  }
+  .rhythm { position: absolute; left: 10px; bottom: 12px; font-size: 13px; color: var(--game-muted); pointer-events: none; text-shadow: 0 1px 2px #000; }
+  .toast {
+    position: absolute; left: 50%; top: 44px; transform: translateX(-50%); padding: 6px 12px; border-radius: 6px;
+    background: var(--game-toast); border: 1px solid var(--game-soft); font-size: 13px; pointer-events: none;
+  }
+  .screen {
+    position: absolute; inset: 0; overflow-y: auto; box-sizing: border-box;
+    display: grid; align-content: center; align-content: safe center; justify-items: start; gap: 10px;
+    padding: clamp(14px, 4vw, 40px);
+    background: var(--game-bg); color: var(--game-fg);
+  }
+  .screen.dim { background: rgba(8,9,12,.86); }
+  .screen h2 { margin: 0; font-size: clamp(18px, 3.2vw, 28px); line-height: 1.25; text-wrap: balance; }
+  .screen p, .screen li { margin: 0; max-width: 60ch; line-height: 1.6; color: var(--game-muted); font-size: clamp(12.5px, 1.7vw, 14.5px); }
+  .screen ul { margin: 0; padding-left: 18px; display: grid; gap: 2px; }
+  .screen .order { color: var(--game-fg); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .go, .opt {
+    font: inherit; font-size: 15px; font-weight: 600; padding: 9px 18px; min-height: 42px; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--game-accent); background: var(--game-accent); color: #0b0d12;
+  }
+  .opt { background: transparent; color: var(--game-fg); }
+  .opt[disabled] { opacity: .38; cursor: not-allowed; }
+  .go:focus-visible, .opt:focus-visible { outline: 2px solid var(--game-accent); outline-offset: 3px; }
+  .last { color: var(--game-fg) !important; font-variant-numeric: tabular-nums; }
+  .screen #pt-tester-slot label, .screen #pt-tester-slot { color: var(--game-muted); }
+  .foot { margin: 0; width: min(960px, 100%); font-size: 12px; color: var(--muted); line-height: 1.6; }
+  kbd { font: inherit; font-size: 11px; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  .screen kbd { border-color: var(--game-soft); color: var(--game-fg); }
+  [hidden] { display: none !important; }
+  @media (max-width: 520px) {
+    .screen { gap: 7px; }
+    .hud { font-size: 11px; }
+    .go, .opt { min-height: 38px; padding: 7px 14px; font-size: 14px; }
+  }
+</style>
+<main class="shell">
+  <header class="top">
+    <h1 class="name" id="game-name">Pulse of Night — 5일차</h1>
+    <span class="ver" id="game-ver"></span>
+  </header>
+
+  <div class="stage" id="stage">
+    <canvas id="game" aria-label="게임 화면"></canvas>
+    <div class="hud" id="hud" hidden>
+      <span id="hud-l"></span>
+      <span class="r" id="hud-r"></span>
+    </div>
+    <div class="rhythm" id="rhythm" hidden></div>
+    <div class="sub" id="sub" hidden></div>
+    <div class="toast" id="toast" hidden></div>
+
+    <section class="screen" id="start-screen">
+      <h2>Pulse of Night — 5일차 야간 근무</h2>
+      <p class="order" id="order-text"></p>
+      <ul>
+        <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 이동 · <kbd>Shift</kbd> 달리기 · 마우스로 바라보는 방향</li>
+        <li><kbd>F</kbd> 손전등 · <kbd>E</kbd> 또는 오른쪽 클릭 태블릿 꺼내기/넣기 · <kbd>Space</kbd> 또는 클릭 촬영(태블릿을 든 상태)</li>
+        <li>이상하다고 판단한 것을 촬영하면 자동으로 보고됩니다. 계단에 서면 층을 고르고, 1층 경비실 단말기(<kbd>Enter</kbd>)에서 퇴근합니다</li>
+      </ul>
+      <div id="pt-tester-slot"></div>
+      <button class="go" id="start-btn" type="button" data-pt-start>근무 시작</button>
+      <p class="last" id="last-result" hidden></p>
+    </section>
+
+    <section class="screen dim" id="floor-menu" hidden>
+      <h2>계단 — 어느 층으로 갈까요?</h2>
+      <div class="row" id="floor-buttons"></div>
+      <p>회색 층은 이번 프로토타입에 없습니다.</p>
+    </section>
+
+    <section class="screen dim" id="shift-menu" hidden>
+      <h2>경비실 단말기</h2>
+      <p>퇴근을 확정하면 오늘 근무를 마치고 정산합니다. 확정한 뒤에는 취소할 수 없습니다.</p>
+      <div class="row">
+        <button class="opt" type="button" data-shift="patrol">순찰 복귀</button>
+        <button class="go" type="button" data-shift="leave">퇴근 확정</button>
+      </div>
+    </section>
+
+    <section class="screen dim" id="end-screen" hidden>
+      <h2 id="end-title"></h2>
+      <p id="end-text"></p>
+      <button class="go" id="end-btn" type="button">기록 남기기</button>
+    </section>
+  </div>
+
+  <p class="foot"><span data-pt-dev><kbd>`</kbd> 튜닝 패널 · </span>오른쪽 위 "기록"에서 플레이 기록을 저장하거나 복사 · 원본: 팀 프로젝트 기획(UE5, 1인칭)을 탑다운 그레이박스로 옮긴 검증용 프로토타입</p>
+</main>
+
+<script type="application/json" id="pt-meta">{
+ "game": "PulseOfNight",
+ "result_fields": {
+  "play_s": "근무 시간(초)",
+  "b1_s": "B01 시간",
+  "b2_s": "B02 시간",
+  "b3_s": "B03 시간",
+  "b4_s": "B04 시간",
+  "b5_s": "B05 시간",
+  "beats_in_range": "3~7분 비트 수",
+  "order_ok": "5→6→7 순서",
+  "correct": "정확 보고",
+  "false_reports": "오보고",
+  "missed": "미보고",
+  "trust_delta": "신뢰도 변화",
+  "flash_end_pct": "손전등 잔량(%)",
+  "flash_on_pct": "손전등 켠 비율(%)",
+  "tablet_end_pct": "태블릿 잔량(%)",
+  "backtrack_m": "되돌아간 거리(m)",
+  "dead_end_entries": "막다른 곳 진입",
+  "stops": "정지",
+  "retreats": "후퇴",
+  "cr04_trap_deaths": "막다른 곳 CR_04 사망",
+  "cr05_detects": "CR_05 감지",
+  "floors_visited": "방문한 층 수",
+  "died_at_s": "사망 시각(초)",
+  "death_cr04": "CR_04 사망",
+  "death_cr05": "CR_05 사망",
+  "death_floor": "사망한 층",
+  "b1_share": "B01 시간 비율(%)",
+  "b1_thr": "B01 위협 시간(%)",
+  "b1_act": "B01 행동 제약(%)",
+  "b1_dens": "B01 켜진 이상현상(평균 개)",
+  "b1_view": "B01 보이는 칸(평균)",
+  "b2_share": "B02 시간 비율(%)",
+  "b2_thr": "B02 위협 시간(%)",
+  "b2_act": "B02 행동 제약(%)",
+  "b2_dens": "B02 켜진 이상현상(평균 개)",
+  "b2_view": "B02 보이는 칸(평균)",
+  "b3_share": "B03 시간 비율(%)",
+  "b3_thr": "B03 위협 시간(%)",
+  "b3_act": "B03 행동 제약(%)",
+  "b3_dens": "B03 켜진 이상현상(평균 개)",
+  "b3_view": "B03 보이는 칸(평균)",
+  "b4_share": "B04 시간 비율(%)",
+  "b4_thr": "B04 위협 시간(%)",
+  "b4_act": "B04 행동 제약(%)",
+  "b4_dens": "B04 켜진 이상현상(평균 개)",
+  "b4_view": "B04 보이는 칸(평균)",
+  "b5_share": "B05 시간 비율(%)",
+  "b5_thr": "B05 위협 시간(%)",
+  "b5_act": "B05 행동 제약(%)",
+  "b5_dens": "B05 켜진 이상현상(평균 개)",
+  "b5_view": "B05 보이는 칸(평균)",
+  "play_in_range": "근무 시간 범위 안(0/1)",
+  "beats_ok": "비트 길이 통과(0/1)",
+  "share_ok": "비트 비율 통과(0/1)",
+  "pace_pairs_n": "비교한 쌍 수",
+  "pace_pairs_ok": "맞은 쌍 비율",
+  "pace_pairs_all": "모든 쌍 맞음(0/1)",
+  "flash_switches": "손전등 켠 횟수",
+  "flash_pct_per_min": "손전등 분당 소모(%)",
+  "death_cr04_turn": "CR_04 되돌아가기·정지 사망",
+  "cr04_stuck": "CR_04 추적 중 15초 넘게 멈춘 횟수",
+  "b1_peak": "B01 겹침(그 비트에 켜진 이상현상의 최대 동시 수)",
+  "b1_hold": "B01 찍지 못한 시간 비율(%)",
+  "b1_newt": "B01 새로 본 칸(분당)",
+  "b2_peak": "B02 겹침(그 비트에 켜진 이상현상의 최대 동시 수)",
+  "b2_hold": "B02 찍지 못한 시간 비율(%)",
+  "b2_newt": "B02 새로 본 칸(분당)",
+  "b3_peak": "B03 겹침(그 비트에 켜진 이상현상의 최대 동시 수)",
+  "b3_hold": "B03 찍지 못한 시간 비율(%)",
+  "b3_newt": "B03 새로 본 칸(분당)",
+  "b4_peak": "B04 겹침(그 비트에 켜진 이상현상의 최대 동시 수)",
+  "b4_hold": "B04 찍지 못한 시간 비율(%)",
+  "b4_newt": "B04 새로 본 칸(분당)",
+  "b5_peak": "B05 겹침(그 비트에 켜진 이상현상의 최대 동시 수)",
+  "b5_hold": "B05 찍지 못한 시간 비율(%)",
+  "b5_newt": "B05 새로 본 칸(분당)",
+  "all_floors": "5·6·7층을 모두 감(1/0)",
+  "cr04_rule_deaths": "규칙을 지키다 죽은 CR_04 사망(1/0)",
+  "cr04_entry_room": "첫 조우를 방에서 나오며 시작(1/0)",
+  "cr04_first_s": "첫 추적이 끝날 때까지(초)"
+ },
+ "event_labels": {
+  "floor": "층 이동",
+  "cr04": "CR_04",
+  "cr05_detect": "CR_05 감지",
+  "light": "손전등",
+  "tablet": "태블릿",
+  "report": "보고",
+  "anomaly_active": "이상현상 활성",
+  "anomaly_seen": "이상현상 목격",
+  "anomaly_end": "이상현상 종료",
+  "stop": "정지",
+  "retreat": "후퇴",
+  "dead_end": "막다른 곳 진입",
+  "death": "사망",
+  "shift": "단말기",
+  "ai_player": "AI 플레이어",
+  "tuning_change": "튜닝 변경",
+  "ai_note": "AI 플레이어 메모",
+  "video_room": "영상 치료실 진입",
+  "cr04_stuck": "CR_04 추적 중 오래 멈춤"
+ },
+ "survey": [
+  {
+   "id": "scariest",
+   "q": "가장 긴장됐던 곳은?",
+   "type": "choice",
+   "options": [
+    "5층 병동",
+    "6층 중환자실",
+    "7층 재활층",
+    "영상 치료실",
+    "없음"
+   ]
+  },
+  {
+   "id": "lost",
+   "q": "길을 잃거나 막힌 곳이 있었다면?",
+   "type": "text"
+  }
+ ],
+ "metric_defs": {
+  "_note": "판정에 쓰는 판 단위 지표의 정의. 실험계획 '지표 정의'가 이 값을 가리킨다. 테스트를 시작하면 바꾸지 않는다",
+  "play_target_s": [
+   1200,
+   1800
+  ],
+  "beat_range_s": [
+   180,
+   420
+  ],
+  "share_range_pct": [
+   10,
+   30
+  ],
+  "beats_exclude": [
+   "B01"
+  ],
+  "beats_min": 3,
+  "pace_pairs": [
+   [
+    "peak",
+    "B03",
+    ">",
+    "B02"
+   ],
+   [
+    "peak",
+    "B03",
+    ">",
+    "B01"
+   ],
+   [
+    "hold",
+    "B03",
+    ">",
+    "B01"
+   ],
+   [
+    "hold",
+    "B03",
+    ">",
+    "B05"
+   ],
+   [
+    "newt",
+    "B04",
+    ">",
+    "B02"
+   ],
+   [
+    "newt",
+    "B04",
+    ">",
+    "B03"
+   ]
+  ],
+  "stop_s": 1.0,
+  "retreat_deg": 150,
+  "retreat_window_s": 0.6,
+  "retreat_debounce_s": 1.5,
+  "lookback_deg": 150,
+  "view_sample_s": 1.0,
+  "cr04_stuck_s": 15,
+  "lookback_window_s": 1.0,
+  "from_room_s": 3.0,
+  "stop_idle_s": 0.2
+ },
+ "version": "v1",
+ "build": "web",
+ "built_at": "2026-10-26T18:02:05+09:00",
+ "tuning_panel": "owner"
+}</script>
+<script type="application/json" id="pt-tuning">{
+ "schema": "tuning-v1",
+ "note": "PulseOfNight 5일차 프로토타입. 원본 값은 why에 절 번호, 원본에 없는 값은 (가정).",
+ "vars": {
+  "walk_speed": {
+   "label": "걷기 속도",
+   "value": 1.5,
+   "min": 0.8,
+   "max": 3.0,
+   "step": 0.1,
+   "unit": "m/초",
+   "why": "원본에 이동 속도가 없다. 병동을 조심스럽게 걷는 속도 (가정)"
+  },
+  "run_speed": {
+   "label": "달리기 속도",
+   "value": 3.2,
+   "min": 2.0,
+   "max": 6.0,
+   "step": 0.1,
+   "unit": "m/초",
+   "why": "원본에 없다. 걷기의 약 2배 (가정)"
+  },
+  "view_fov_deg": {
+   "label": "시야각",
+   "value": 90,
+   "min": 60,
+   "max": 120,
+   "step": 5,
+   "unit": "도",
+   "why": "1인칭 시야를 탑다운에서 부채꼴로 흉내 낸다. 일반적인 1인칭 시야각 (가정)"
+  },
+  "near_sight_m": {
+   "label": "몸 옆 감지 거리",
+   "value": 1.5,
+   "min": 0,
+   "max": 2.0,
+   "step": 0.1,
+   "unit": "m",
+   "why": "1인칭에서도 바로 옆 벽과 트인 곳은 느낀다. 몸 주변 이 거리(옆·대각선 칸)는 방향과 상관없이 보인다 (가정)"
+  },
+  "near_sight_k": {
+   "label": "몸 옆 감지 밝기",
+   "value": 0.45,
+   "min": 0,
+   "max": 1,
+   "step": 0.05,
+   "unit": "배",
+   "why": "몸 옆 칸을 그리는 밝기 (가정)"
+  },
+  "dark_sight_m": {
+   "label": "어둠 속 시야",
+   "value": 2.0,
+   "min": 0.5,
+   "max": 5.0,
+   "step": 0.5,
+   "unit": "m",
+   "why": "조명도 손전등도 없을 때 바로 앞만 보인다 (가정)"
+  },
+  "lit_sight_m": {
+   "label": "조명 구역 시야",
+   "value": 14,
+   "min": 6,
+   "max": 25,
+   "step": 1,
+   "unit": "m",
+   "why": "고정 조명이 비추는 곳은 멀리서도 보인다 (가정)"
+  },
+  "flash_center_m": {
+   "label": "손전등 중심 거리",
+   "value": 8,
+   "min": 4,
+   "max": 12,
+   "step": 0.5,
+   "unit": "m",
+   "why": "원본 5.5 손전등 유효 거리 중심 8m"
+  },
+  "flash_max_m": {
+   "label": "손전등 최대 거리",
+   "value": 12,
+   "min": 6,
+   "max": 16,
+   "step": 0.5,
+   "unit": "m",
+   "why": "원본 5.5 손전등 유효 거리 최대 12m"
+  },
+  "flash_cone_deg": {
+   "label": "손전등 각도",
+   "value": 60,
+   "min": 30,
+   "max": 90,
+   "step": 5,
+   "unit": "도",
+   "why": "원본에 각도가 없다. 시야각보다 좁게 (가정)"
+  },
+  "flashlight_drain_pct_s": {
+   "label": "손전등 소모",
+   "value": 0.075,
+   "min": 0.02,
+   "max": 0.2,
+   "step": 0.005,
+   "unit": "%/초",
+   "why": "원본 5.3·5.5 점등 유지 0.075%/초"
+  },
+  "flashlight_switch_pct": {
+   "label": "점등 비용",
+   "value": 1.0,
+   "min": 0,
+   "max": 3,
+   "step": 0.1,
+   "unit": "%/회",
+   "why": "원본 5.3 점등 전환 1회 1.0% (소등은 무료)"
+  },
+  "low_power_pct": {
+   "label": "저전력 기준",
+   "value": 25,
+   "min": 5,
+   "max": 50,
+   "step": 1,
+   "unit": "%",
+   "why": "원본 5.5 저전력 임계 25%"
+  },
+  "low_power_range_mul": {
+   "label": "저전력 거리 배율",
+   "value": 0.6,
+   "min": 0.3,
+   "max": 1.0,
+   "step": 0.05,
+   "unit": "배",
+   "why": "원본은 저전력에서 거리 두 값만 줄어든다고만 한다. 얼마나 줄지는 (가정)"
+  },
+  "tablet_draw_s": {
+   "label": "태블릿 꺼내기",
+   "value": 1.0,
+   "min": 0.2,
+   "max": 2.0,
+   "step": 0.1,
+   "unit": "초",
+   "why": "원본 5.5 꺼내기 1.0초"
+  },
+  "tablet_stow_s": {
+   "label": "태블릿 넣기",
+   "value": 0.5,
+   "min": 0.1,
+   "max": 1.5,
+   "step": 0.1,
+   "unit": "초",
+   "why": "원본 5.5 넣기 0.5초"
+  },
+  "capture_lock_s": {
+   "label": "촬영 후 조작 불가",
+   "value": 1.0,
+   "min": 0.3,
+   "max": 2.0,
+   "step": 0.1,
+   "unit": "초",
+   "why": "원본 5.2 판독·자동 보고 1.0초"
+  },
+  "tablet_shot_pct": {
+   "label": "촬영 소모",
+   "value": 1.3333,
+   "min": 0.5,
+   "max": 3.0,
+   "step": 0.0001,
+   "unit": "%/회",
+   "why": "원본 5.5 촬영 1.3333%/회"
+  },
+  "tablet_drain_pct_s": {
+   "label": "태블릿 사용 소모",
+   "value": 0.12,
+   "min": 0.05,
+   "max": 0.2,
+   "step": 0.01,
+   "unit": "%/초",
+   "why": "원본 5.3 태블릿 0.08~0.15%/초 중 카메라 가중(×1.2) 값"
+  },
+  "capture_fov_deg": {
+   "label": "카메라 화각",
+   "value": 50,
+   "min": 20,
+   "max": 90,
+   "step": 5,
+   "unit": "도",
+   "why": "원본은 화면 안에 들어오는지로 판정한다. 탑다운 부채꼴 각도는 (가정)"
+  },
+  "capture_dist_m": {
+   "label": "기본 촬영 거리",
+   "value": 4.0,
+   "min": 1.5,
+   "max": 8.0,
+   "step": 0.5,
+   "unit": "m",
+   "why": "원본은 이상현상마다 따로 정한다. 값이 없는 물건의 기본값 (가정)"
+  },
+  "anomaly_active_s": {
+   "label": "이상현상 활성 시간(Timer)",
+   "value": 15,
+   "min": 5,
+   "max": 40,
+   "step": 1,
+   "unit": "초",
+   "why": "원본 6.4 활성 지속 기본 15.0초 (최소 조작 4.5초 + 발견·판단 여유)"
+  },
+  "cr04_turn_deg_s": {
+   "label": "CR_04 위치 보정 속도",
+   "value": 200,
+   "min": 60,
+   "max": 600,
+   "step": 10,
+   "unit": "도/초",
+   "why": "원본 7.4 '진행 방향과 위치를 지속 보정'. 모퉁이 90도 회전에서는 시야에 안 들어오고 뒤돌아보면 들어오게 (가정)"
+  },
+  "cr04_body_half_deg": {
+   "label": "CR_04 몸 폭(각도)",
+   "value": 24,
+   "min": 0,
+   "max": 45,
+   "step": 1,
+   "unit": "도",
+   "why": "원본 7.4 판정점 5개(머리·가슴·골반·좌우 어깨) 중 하나라도 보이면 사망. 0.5m 거리에서 어깨 폭 약 0.45m를 각도로 (가정)"
+  },
+  "cr04_confirm_s": {
+   "label": "CR_04 확인 시간",
+   "value": 0.05,
+   "min": 0.0,
+   "max": 0.5,
+   "step": 0.01,
+   "unit": "초",
+   "why": "원본 7.4 확인 시간 0.05초"
+  },
+  "cr04_reverse_deg": {
+   "label": "CR_04 되돌아가기 각도",
+   "value": 150,
+   "min": 0,
+   "max": 180,
+   "step": 5,
+   "unit": "도",
+   "why": "추적 중 진행 방향이 이만큼 바뀌면 뒤따라오던 것과 마주쳐 사망. 원본 8.3 '막다른 길에서 되돌아 나오면 죽는다'를 명시 규칙으로 옮김(10/26 본인 결정: 추천안 A). 각도 값은 (가정)"
+  },
+  "cr04_reverse_dist_m": {
+   "label": "되돌아가기 판정 거리",
+   "value": 7.5,
+   "min": 3,
+   "max": 15,
+   "step": 0.5,
+   "unit": "m",
+   "why": "추적 중 걸어온 마지막 이 거리 안의 진행 방향과 비교한다. 10/26 본인 결정 '5초'를 걷기 1.5m/초로 거리로 옮긴 값(5초 × 1.5m = 7.5m). 거리라서 걷기·달리기가 같고 멈춰도 지워지지 않는다. ㅁ 복도의 같은 쪽 모서리 간격은 16칸 이상이라 정상 진행은 잡히지 않는다 (가정)"
+  },
+  "cr04_reverse_chunk_m": {
+   "label": "진행 방향을 재는 토막",
+   "value": 1.0,
+   "min": 0.5,
+   "max": 2,
+   "step": 0.1,
+   "unit": "m",
+   "why": "진행 방향을 이 길이 토막의 순변위로 잰다. 벽 모서리에 걸려 0.3m쯤 옆으로 미끄러진 걸음이 방향을 크게 바꾸지 않게 (가정)"
+  },
+  "cr04_stop_lethal_s": {
+   "label": "CR_04 정지 사망 시간",
+   "value": 0,
+   "min": 0,
+   "max": 10,
+   "step": 0.5,
+   "unit": "초",
+   "why": "0 = 원본 7.4 '멈추면 공격하지 않는다'를 따름(10/26 본인 결정). 11.2 B02 '멈추는 것이 곧 실패'는 재현하지 않는다"
+  },
+  "cr05_safe_s": {
+   "label": "CR_05 안전 시간",
+   "value": 12,
+   "min": 4,
+   "max": 30,
+   "step": 1,
+   "unit": "초",
+   "why": "원본에 CR_05 세부 규칙이 없다. 촬영 한 번(약 4.5초)을 두 번 넣을 수 있는 길이 [위임] (가정)"
+  },
+  "cr05_grace_s": {
+   "label": "CR_05 회피 유예",
+   "value": 2.0,
+   "min": 0.5,
+   "max": 5.0,
+   "step": 0.1,
+   "unit": "초",
+   "why": "원본 5.5 '수납 완료가 유예 시간 안에 들어온다'. 판독 1.0초 + 넣기 0.5초보다 길게 [위임] (가정)"
+  },
+  "cr05_watch_s": {
+   "label": "CR_05 감시 시간",
+   "value": 6,
+   "min": 2,
+   "max": 15,
+   "step": 1,
+   "unit": "초",
+   "why": "[위임] (가정)"
+  },
+  "cr05_lethal_count": {
+   "label": "CR_05 사망 누적",
+   "value": 2,
+   "min": 1,
+   "max": 5,
+   "step": 1,
+   "unit": "회",
+   "why": "원본 7.2 누적 페널티 유지. 두 번째 감지에서 사망 [위임] (가정)"
+  },
+  "floor_travel_s": {
+   "label": "계단 1개 층 이동",
+   "value": 6,
+   "min": 2,
+   "max": 20,
+   "step": 1,
+   "unit": "초",
+   "why": "원본에 없다. 계단 한 층 (가정)"
+  },
+  "move_smooth_per_s": {
+   "label": "이동 방향 따라가는 빠르기",
+   "value": 10,
+   "min": 2,
+   "max": 30,
+   "step": 1,
+   "unit": "/초",
+   "why": "이동 방향(CR_04가 붙는 기준)이 실제 움직임을 따라가는 빠르기. 약 0.1초 (가정)"
+  },
+  "key_turn_rad_s": {
+   "label": "키보드 시선 회전",
+   "value": 6,
+   "min": 1,
+   "max": 20,
+   "step": 0.5,
+   "unit": "rad/초",
+   "why": "마우스를 안 쓸 때 시선이 이동 방향으로 도는 빠르기 (가정)"
+  },
+  "body_radius_m": {
+   "label": "몸 반지름",
+   "value": 0.3,
+   "min": 0.15,
+   "max": 0.6,
+   "step": 0.05,
+   "unit": "m",
+   "why": "충돌용 몸 크기. 원본 CR_03 절의 '충돌 직경 2m'는 침식 통로 기준이라 쓰지 않았다 (가정)"
+  },
+  "voice_cue_m": {
+   "label": "목소리 자막 거리",
+   "value": 7,
+   "min": 2,
+   "max": 15,
+   "step": 0.5,
+   "unit": "m",
+   "why": "PHN_030 환자 음성 반복은 소리 단서라 이 거리 안에서 자막으로 보여 준다 (가정)"
+  },
+  "trust_correct": {
+   "label": "정확 보고 신뢰도",
+   "value": 0.4,
+   "min": 0,
+   "max": 2,
+   "step": 0.1,
+   "unit": "점",
+   "why": "원본 9.1 정확 보고 +0.4"
+  },
+  "trust_false": {
+   "label": "오보고 신뢰도",
+   "value": -1.1,
+   "min": -3,
+   "max": 0,
+   "step": 0.1,
+   "unit": "점",
+   "why": "원본 9.1 오보고 −1.1"
+  },
+  "trust_missed": {
+   "label": "미보고 신뢰도",
+   "value": -1.6,
+   "min": -3,
+   "max": 0,
+   "step": 0.1,
+   "unit": "점",
+   "why": "원본 9.1 미보고 −1.6"
+  }
+ }
+}</script>
+<script>/* playtest.js */
+/*
+ * playtest.js — 플레이테스트 기록 모듈
+ * 기록 형식: playtest-v1 (개인프로젝트/_도구/기록형식.md)
+ *
+ * game.js가 쓰는 것
+ *   Playtest.tuning               지금 튜닝 값 { 이름: 숫자 }. 튜닝 패널이 바꾸면 이 객체가 바로 바뀐다
+ *   Playtest.timeScale            게임 시간 배율. 자동 점검 때만 1이 아니다. 게임 시간 = 실제 dt * timeScale
+ *   Playtest.busy                 설문이나 기록 창이 열려 있으면 true. 이때 게임은 입력을 받지 않는다
+ *   Playtest.onTuning(fn)         튜닝 값이 바뀔 때 fn(이름, 새 값)
+ *   Playtest.start()              한 판 시작
+ *   Playtest.log(종류, 데이터)      의미 있는 행동 하나. 예: Playtest.log('collect', { streak: 3 })
+ *   Playtest.end(결말, 결과, 다음)  한 판 끝. 결말 'clear' | 'fail' | 'quit'. 결과는 숫자만 담은 객체.
+ *                                 설문을 띄우고, 설문이 끝나면 다음()을 부른다
+ *
+ * 이 파일은 게임마다 고치지 않는다. 고칠 일이 생기면 _도구/web/playtest.js를 고치고
+ * 기록 형식이 바뀌면 기록형식.md의 버전을 올린다. Unity의 PlaytestLog.cs도 같이 고친다.
+ */
+(function () {
+  'use strict';
+
+  var SCHEMA = 'playtest-v1';
+  var MAX_EVENTS = 1500;            // 한 판의 사건 상한. 넘으면 events_truncated = true
+  var SELF_LABELS = ['본인', '나', 'me'];
+
+  // ---------- 읽기 ----------
+  function readJson(id) {
+    var el = document.getElementById(id);
+    if (!el) return null;
+    var text = (el.textContent || '').trim();
+    if (!text) return null;
+    try { return JSON.parse(text); } catch (e) {
+      console.error('[playtest] #' + id + ' JSON을 읽지 못했습니다', e);
+      return null;
+    }
+  }
+
+  var META = readJson('pt-meta') || {};
+  META.game = META.game || 'untitled';
+  META.version = META.version || 'dev';
+  META.build = 'web';
+  META.tuning_panel = META.tuning_panel || 'owner';
+  var LABELS = META.result_fields || {};
+  var TUNING_DEF = readJson('pt-tuning') || { schema: 'tuning-v1', vars: {} };
+  var VARS = TUNING_DEF.vars || {};
+
+  var defaults = {};
+  Object.keys(VARS).forEach(function (k) { defaults[k] = Number(VARS[k].value); });
+  var tuning = {};
+  Object.keys(defaults).forEach(function (k) { tuning[k] = defaults[k]; });
+
+  var timeScale = Number(window.__PLAYTEST_TIMESCALE) || 1;
+  var isBot = window.__PLAYTEST_BOT === true;
+
+  // ---------- 저장소 (브라우저) ----------
+  var mem = {};
+  var store = {
+    get: function (k) {
+      try { var v = window.localStorage.getItem(k); if (v !== null) return v; } catch (e) { /* 막힌 저장소 */ }
+      return Object.prototype.hasOwnProperty.call(mem, k) ? mem[k] : null;
+    },
+    set: function (k, v) {
+      mem[k] = v;
+      try { window.localStorage.setItem(k, v); } catch (e) { /* 이 판은 메모리에만 */ }
+    }
+  };
+  var LIST_KEY = 'playtest:' + META.game + ':' + META.build + ':' + META.version;
+
+  function loadList() {
+    try { var a = JSON.parse(store.get(LIST_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+  }
+  function saveSession(s) {
+    var list = loadList().filter(function (x) { return x.session_id !== s.session_id; });
+    list.push(s);
+    store.set(LIST_KEY, JSON.stringify(list));
+  }
+
+  function rand(n) {
+    var c = 'abcdefghijkmnpqrstuvwxyz23456789', out = '';
+    for (var i = 0; i < n; i++) out += c[Math.floor(Math.random() * c.length)];
+    return out;
+  }
+  // 시각은 이 기기의 시간대로 적는다 (예: 2026-10-27T21:15:30.120+09:00). 날짜가 UTC로 하루 밀리지 않게
+  function iso(d) {
+    d = d || new Date();
+    function p(x, n) { x = String(Math.abs(x)); while (x.length < (n || 2)) x = '0' + x; return x; }
+    var off = -d.getTimezoneOffset();
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + '.' + p(d.getMilliseconds(), 3) +
+      (off >= 0 ? '+' : '-') + p(Math.floor(Math.abs(off) / 60)) + ':' + p(Math.abs(off) % 60);
+  }
+  function stamp(d) {
+    d = d || new Date();
+    function p(x) { return (x < 10 ? '0' : '') + x; }
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + 'T' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds());
+  }
+  function safeName(s) { return String(s).replace(/[^0-9A-Za-z가-힣_.-]+/g, '-'); }
+
+  // 테스터 구분: 기기 id + 이름. 한 기기에서 여러 사람이 하면 이름으로 갈린다.
+  // 이름은 이 페이지를 연 동안만 기억한다. 새로 열면 비어 있어, 다음 사람이 앞사람 이름으로 기록되지 않는다.
+  var deviceId = store.get('playtest:tester-id');
+  if (!deviceId) { deviceId = 't-' + rand(8); store.set('playtest:tester-id', deviceId); }
+  var testerLabel = '';
+  function hashLabel(s) {
+    var h = 5381;
+    for (var i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  }
+  function testerIdFor(label) { return label ? deviceId + '-' + hashLabel(label) : deviceId; }
+
+  // ---------- claude.ai 기능 (있을 때만) ----------
+  // 아티팩트로 열면 db(공유 저장), user(본인 여부), downloads(파일 저장)를 쓴다. 없으면 브라우저 저장만.
+  var caps = { db: null, user: null, downloads: null, ready: false };
+  var isOwner = null;               // null = 모름
+  var dbChain = Promise.resolve();
+  var dbError = null;
+  var thisLoad = [];                // 이 페이지에서 만든 세션 id
+  var synced = {};
+
+  var inViewer = false; // 공개용(guest): 판 기록은 방문자 브라우저에만 남고 아티팩트 저장소로 보내지 않는다
+  if (inViewer) {
+    window.claude.use('db').then(function (db) {
+      caps.db = db;
+      if (db) thisLoad.forEach(function (id) {
+        var s = loadList().filter(function (x) { return x.session_id === id; })[0];
+        if (s && !synced[id]) dbWrite(s);
+      });
+      renderBar();
+    }, function () {});
+    window.claude.use('user').then(function (u) {
+      caps.user = u;
+      if (!u) { applyPanelRule(); return; }
+      u.isOwner().then(function (v) { isOwner = !!v; applyPanelRule(); }, function () {});
+      u.id().then(function (id) { if (id) deviceId = 'u-' + id; }, function () {});
+    }, function () { applyPanelRule(); });
+    window.claude.use('downloads').then(function (d) { caps.downloads = d; }, function () {});
+  }
+
+  function dbWrite(s) {
+    if (!caps.db) return;
+    var body = JSON.parse(JSON.stringify(s));
+    var ref;
+    try { ref = caps.db.collection('sessions').doc(s.session_id); } catch (e) { console.warn('[playtest] 세션 id가 저장 경로에 맞지 않습니다', e); return; }
+    dbChain = dbChain.then(function () { return ref.set(body); }).then(function () {
+      synced[s.session_id] = true; dbError = null; renderBar();
+    }, function (e) {
+      dbError = (e && e.code) || 'unavailable';
+      console.warn('[playtest] 공유 저장 실패:', dbError);
+      renderBar();
+    });
+  }
+
+  // ---------- 세션 ----------
+  var session = null;
+  var t0 = 0;
+  var listeners = [];
+  var panelToggle = null;
+  var busyFlags = { survey: false, panel: false, records: false };
+
+  // 본인 판정: 이름을 적었으면 이름을 따른다. 비었으면 기획자용(play-dev.html)이거나 아티팩트 주인이면 본인
+  function computeSelf(label) {
+    if (isBot) return false;
+    if (label) return SELF_LABELS.indexOf(label) >= 0;
+    return META.tuning_panel === 'all' || isOwner === true;
+  }
+
+  function sameAsDefaults() {
+    return Object.keys(defaults).every(function (k) { return tuning[k] === defaults[k]; });
+  }
+
+  function start() {
+    if (session && !session.ended_at) end('quit', {});
+    var now = new Date();
+    var label = isBot ? '자동점검' : testerLabel;
+    var self = computeSelf(label);
+    session = {
+      schema: SCHEMA,
+      session_id: META.build + '-' + META.version + '-' + stamp(now) + '-' + rand(4),
+      game: META.game,
+      build: META.build,
+      version: META.version,
+      ported_from: META.ported_from || null,
+      tester: {
+        id: testerIdFor(label),
+        label: label,
+        self: self,
+        bot: isBot
+      },
+      started_at: iso(now),
+      ended_at: null,
+      duration_s: 0,
+      time_scale: timeScale,
+      tuning: JSON.parse(JSON.stringify(tuning)),
+      tuning_default: sameAsDefaults(),
+      tuning_changed: false,
+      events: [],
+      events_truncated: false,
+      result: null,
+      survey: null,
+      env: {
+        host: location.protocol === 'file:' ? 'file' : (inViewer ? 'claude' : 'web'),
+        screen: window.innerWidth + 'x' + window.innerHeight,
+        ua: String(navigator.userAgent || '').slice(0, 160)
+      }
+    };
+    t0 = performance.now();
+    log('start');
+    // 시작할 때 한 번 저장한다. 끝나기 전에 창을 닫아도 '중단'으로 남게 (pagehide에서 마감)
+    saveSession(session);
+    thisLoad.push(session.session_id);
+    dbWrite(session);
+    renderBar();
+    return session;
+  }
+
+  function log(type, data) {
+    if (!session || session.ended_at) return;
+    if (session.events.length >= MAX_EVENTS) { session.events_truncated = true; return; }
+    var e = { t: Math.round((performance.now() - t0) / 10) / 100, type: String(type) };
+    if (data && typeof data === 'object') e.data = data;
+    session.events.push(e);
+  }
+
+  function numericOnly(obj) {
+    var out = {};
+    Object.keys(obj || {}).forEach(function (k) {
+      var v = obj[k];
+      if (typeof v === 'number' && isFinite(v)) out[k] = v;
+      else if (v !== undefined) console.warn('[playtest] 결과 ' + k + '는 숫자가 아니라 빼고 기록합니다:', v);
+    });
+    return out;
+  }
+
+  function end(outcome, result, next) {
+    if (!session || session.ended_at) { if (next) next(); return; }
+    log('end', { outcome: outcome });
+    session.ended_at = iso();
+    // 아티팩트 주인 확인이 시작 뒤에 끝났을 수 있으니 이름이 빈 판은 끝날 때 다시 본다
+    if (!session.tester.label) session.tester.self = computeSelf('');
+    session.duration_s = Math.round((performance.now() - t0) / 100) / 10;
+    var r = numericOnly(result);
+    r.outcome = String(outcome || 'quit');
+    session.result = r;
+    var s = session;
+    saveSession(s);
+    dbWrite(s);
+    renderBar();
+    if (outcome === 'quit' && !next) return;
+    openSurvey(s, next);
+  }
+
+  // 한 판 도중에 창을 닫거나 다른 페이지로 가면 '중단'으로 마감한다
+  window.addEventListener('pagehide', function () {
+    if (session && !session.ended_at) end('quit', {});
+  });
+
+  // ---------- 튜닝 ----------
+  function setTuning(name, value, opts) {
+    if (!(name in VARS)) return;
+    var d = VARS[name];
+    var v = Number(value);
+    if (!isFinite(v)) return;
+    if (isFinite(d.min)) v = Math.max(Number(d.min), v);
+    if (isFinite(d.max)) v = Math.min(Number(d.max), v);
+    var from = tuning[name];
+    tuning[name] = v;
+    listeners.forEach(function (fn) { try { fn(name, v); } catch (e) { console.error(e); } });
+    if (!opts || opts.log !== false) logTuningChange(name, from, v);
+  }
+  function logTuningChange(name, from, to) {
+    if (from === to) return;
+    if (session && !session.ended_at) {
+      session.tuning_changed = true;
+      log('tuning_change', { name: name, from: from, to: to });
+    }
+  }
+  function resetTuning() {
+    Object.keys(defaults).forEach(function (k) { setTuning(k, defaults[k]); });
+  }
+
+  function panelAllowed() {
+    var rule = META.tuning_panel;
+    if (rule === 'off') return false;
+    if (rule === 'all') return true;
+    if (location.protocol === 'file:') return true;
+    if (inViewer) return isOwner === true;
+    return true;
+  }
+
+  // ---------- 화면 조각 ----------
+  function h(tag, attrs, kids) {
+    var el = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'text') el.textContent = attrs[k];
+      else if (k === 'hidden') el.hidden = !!attrs[k];
+      else el.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c) el.appendChild(c); });
+    return el;
+  }
+
+  var bar, tuneBtn, recBtn, toast, toastTimer;
+  function buildBar() {
+    tuneBtn = h('button', { type: 'button', class: 'pt-btn', id: 'pt-tune-btn', text: '튜닝', hidden: true, 'aria-keyshortcuts': '`' });
+    recBtn = h('button', { type: 'button', class: 'pt-btn', id: 'pt-rec-btn' });
+    toast = h('span', { class: 'pt-toast', role: 'status', 'aria-live': 'polite' });
+    bar = h('div', { class: 'pt-bar', id: 'pt-bar' }, [toast, tuneBtn, recBtn]);
+    document.body.appendChild(bar);
+    tuneBtn.addEventListener('click', function () { if (panelToggle) panelToggle(); });
+    recBtn.addEventListener('click', openRecords);
+  }
+  function renderBar() {
+    if (!recBtn) return;
+    var n = loadList().length;
+    recBtn.textContent = '기록 ' + n;
+    recBtn.title = caps.db && !dbError ? '자동 저장 켜짐' : '이 브라우저에 저장됨';
+  }
+  function flash(msg) {
+    if (!toast) return;
+    toast.textContent = msg;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.textContent = ''; }, 2600);
+  }
+  function applyPanelRule() {
+    var on = panelAllowed() && Object.keys(VARS).length > 0;
+    if (tuneBtn) tuneBtn.hidden = !on;
+    // 튜닝 안내처럼 기획자에게만 보일 것은 data-pt-dev를 단다
+    Array.prototype.forEach.call(document.querySelectorAll('[data-pt-dev]'), function (el) { el.hidden = !on; });
+  }
+
+  // 테스터 이름 칸: 게임 시작 화면의 #pt-tester-slot에 넣는다
+  function buildTesterSlot() {
+    var slot = document.getElementById('pt-tester-slot');
+    if (!slot || isBot) return;
+    var input = h('input', { id: 'pt-tester', type: 'text', maxlength: '24', autocomplete: 'off', placeholder: '예: 친구A, 내가 할 때는 본인' });
+    input.value = testerLabel;
+    function sync() { testerLabel = input.value.trim(); }
+    input.addEventListener('input', sync);
+    input.addEventListener('change', sync);
+    slot.appendChild(h('label', { class: 'pt-tester-label', for: 'pt-tester', text: '누가 하나요? (사람이 바뀌면 이름도 바꿔 주세요)' }));
+    slot.appendChild(input);
+  }
+
+  // ---------- 설문 ----------
+  var survey, surveyForm, surveyResult, funWrap, againWrap, comment, extraWrap;
+  var answer = { fun: null, again: null };
+  var surveyTarget = null, surveyNext = null;
+
+  function scaleButtons(wrap, attr, values, labels) {
+    values.forEach(function (v, i) {
+      var b = h('button', { type: 'button', class: 'pt-choice', 'aria-pressed': 'false', text: labels ? labels[i] : String(v) });
+      b.setAttribute(attr, String(v));
+      wrap.appendChild(b);
+    });
+  }
+  function press(wrap, attr, value) {
+    Array.prototype.forEach.call(wrap.querySelectorAll('[' + attr + ']'), function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute(attr) === String(value)));
+    });
+  }
+
+  function buildSurvey() {
+    funWrap = h('div', { class: 'pt-scale', role: 'group', 'aria-labelledby': 'pt-fun-q' });
+    scaleButtons(funWrap, 'data-pt-fun', [1, 2, 3, 4, 5]);
+    againWrap = h('div', { class: 'pt-pair', role: 'group', 'aria-labelledby': 'pt-again-q' });
+    scaleButtons(againWrap, 'data-pt-again', ['yes', 'no'], ['네', '아니요']);
+    comment = h('textarea', { id: 'pt-comment', rows: '2', maxlength: '500', placeholder: '좋았던 점, 답답했던 점' });
+    extraWrap = h('div', { class: 'pt-extra' });
+    (META.survey || []).forEach(function (q, i) {
+      if (!q || !q.id || !q.q) return;
+      var id = 'pt-x-' + i;
+      extraWrap.appendChild(h('label', { for: id, class: 'pt-q', text: q.q }));
+      if (q.type === 'choice' && Array.isArray(q.options)) {
+        var sel = h('select', { id: id, 'data-pt-extra': q.id }, [h('option', { value: '', text: '고르기' })]);
+        q.options.forEach(function (o) { sel.appendChild(h('option', { value: String(o), text: String(o) })); });
+        extraWrap.appendChild(sel);
+      } else {
+        extraWrap.appendChild(h('input', { id: id, type: 'text', maxlength: '300', 'data-pt-extra': q.id }));
+      }
+    });
+    surveyResult = h('p', { class: 'pt-sub', id: 'pt-survey-result' });
+    var submit = h('button', { type: 'submit', class: 'pt-btn pt-primary', 'data-pt-submit': '', text: '보내기' });
+    var skip = h('button', { type: 'button', class: 'pt-btn', 'data-pt-skip': '', text: '건너뛰기' });
+    surveyForm = h('form', { class: 'pt-card', id: 'pt-survey-form', novalidate: '' }, [
+      h('h2', { id: 'pt-survey-title', text: '한 판 어땠나요?' }),
+      surveyResult,
+      h('p', { class: 'pt-q', id: 'pt-fun-q', text: '재미' }),
+      funWrap,
+      h('div', { class: 'pt-ends', 'aria-hidden': 'true' }, [h('span', { text: '1 재미없음' }), h('span', { text: '5 아주 재미있음' })]),
+      h('p', { class: 'pt-q', id: 'pt-again-q', text: '한 판 더 하고 싶나요?' }),
+      againWrap,
+      extraWrap,
+      h('label', { class: 'pt-q', for: 'pt-comment', text: '한 줄 소감 (선택)' }),
+      comment,
+      h('div', { class: 'pt-actions' }, [skip, submit])
+    ]);
+    survey = h('div', { class: 'pt-overlay', id: 'pt-survey', hidden: true, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'pt-survey-title' }, [surveyForm]);
+    document.body.appendChild(survey);
+
+    funWrap.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-pt-fun]'); if (!b) return;
+      answer.fun = Number(b.getAttribute('data-pt-fun')); press(funWrap, 'data-pt-fun', answer.fun);
+    });
+    againWrap.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-pt-again]'); if (!b) return;
+      answer.again = b.getAttribute('data-pt-again') === 'yes'; press(againWrap, 'data-pt-again', answer.again ? 'yes' : 'no');
+    });
+    skip.addEventListener('click', function () { closeSurvey(false); });
+    surveyForm.addEventListener('submit', function (e) { e.preventDefault(); closeSurvey(true); });
+  }
+
+  function resultText(r) {
+    var parts = [];
+    Object.keys(r || {}).forEach(function (k) {
+      if (k === 'outcome') return;
+      parts.push((LABELS[k] || k) + ' ' + r[k]);
+    });
+    var o = { clear: '성공', fail: '실패', quit: '중단' }[r && r.outcome] || '';
+    return (o ? o + ' · ' : '') + parts.join(' · ');
+  }
+  function whoText(s) {
+    var t = s.tester || {};
+    return '테스터: ' + (t.label || '이름 없음') + (t.self ? ' (본인)' : '');
+  }
+
+  function openSurvey(s, next) {
+    surveyTarget = s; surveyNext = next || null;
+    answer = { fun: null, again: null };
+    press(funWrap, 'data-pt-fun', ''); press(againWrap, 'data-pt-again', '');
+    comment.value = '';
+    Array.prototype.forEach.call(extraWrap.querySelectorAll('[data-pt-extra]'), function (el) { el.value = ''; });
+    surveyResult.textContent = whoText(s) + ' · ' + resultText(s.result);
+    survey.hidden = false; busyFlags.survey = true;
+    var first = funWrap.querySelector('button'); if (first) first.focus();
+  }
+
+  function closeSurvey(send) {
+    var s = surveyTarget;
+    if (s && send) {
+      var extra = {};
+      Array.prototype.forEach.call(extraWrap.querySelectorAll('[data-pt-extra]'), function (el) {
+        if (el.value.trim()) extra[el.getAttribute('data-pt-extra')] = el.value.trim();
+      });
+      s.survey = { fun: answer.fun, again: answer.again, comment: comment.value.trim(), extra: extra, answered_at: iso() };
+      saveSession(s); dbWrite(s);
+      flash('기록했습니다');
+    } else if (s) {
+      flash('설문 없이 기록했습니다');
+    }
+    survey.hidden = true; busyFlags.survey = false;
+    surveyTarget = null;
+    var next = surveyNext; surveyNext = null;
+    renderBar();
+    if (next) next();
+  }
+
+  // ---------- 기록 보기·내보내기 ----------
+  var records, recText, recStatus, recCopyBox;
+  function buildRecords() {
+    recText = h('p', { class: 'pt-sub', id: 'pt-rec-count' });
+    recStatus = h('p', { class: 'pt-sub', id: 'pt-rec-status' });
+    recCopyBox = h('textarea', { id: 'pt-rec-copy', rows: '4', readonly: '', hidden: true, 'aria-label': '복사할 기록' });
+    var save = h('button', { type: 'button', class: 'pt-btn pt-primary', id: 'pt-rec-save', text: '파일로 저장' });
+    var copy = h('button', { type: 'button', class: 'pt-btn', id: 'pt-rec-copybtn', text: '복사' });
+    var close = h('button', { type: 'button', class: 'pt-btn', id: 'pt-rec-close', text: '닫기' });
+    records = h('div', { class: 'pt-overlay', id: 'pt-records', hidden: true, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'pt-rec-title' }, [
+      h('div', { class: 'pt-card' }, [
+        h('h2', { id: 'pt-rec-title', text: '플레이 기록' }), recText, recStatus, recCopyBox,
+        h('div', { class: 'pt-actions' }, [close, copy, save])
+      ])
+    ]);
+    document.body.appendChild(records);
+    save.addEventListener('click', exportFile);
+    copy.addEventListener('click', copyAll);
+    close.addEventListener('click', function () { records.hidden = true; busyFlags.records = false; });
+  }
+  function exportPayload() {
+    return JSON.stringify({ schema: 'playtest-export-v1', exported_at: iso(), game: META.game, version: META.version, sessions: loadList() }, null, 1);
+  }
+  function exportName() { return 'playtest-' + safeName(META.game) + '-' + META.build + '-' + META.version + '-' + stamp() + '.json'; }
+  function openRecords() {
+    var n = loadList().length;
+    recText.textContent = META.version + ' 버전에서 ' + n + '판을 기록했습니다.';
+    recStatus.textContent = caps.db && !dbError
+      ? '기획자가 바로 읽을 수 있게 저장하고 있습니다.'
+      : '이 브라우저에만 저장됩니다. 파일로 저장하거나 복사해서 기획자에게 보내 주세요.';
+    recCopyBox.hidden = true;
+    records.hidden = false; busyFlags.records = true;
+  }
+  function exportFile() {
+    if (!loadList().length) { flash('아직 기록이 없습니다'); return; }
+    var name = exportName(), data = exportPayload();
+    if (caps.downloads) {
+      caps.downloads.save({ filename: name, data: data }).then(function () { flash('저장했습니다'); }, function (e) {
+        if (e && e.code === 'declined') return;
+        showCopyBox(data); flash('파일 저장이 막혀 있어 복사 칸을 열었습니다');
+      });
+      return;
+    }
+    try {
+      var url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
+      var a = h('a', { href: url, download: name });
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      flash('저장했습니다. 안 받아졌으면 복사를 누르세요');
+    } catch (e) { showCopyBox(data); }
+  }
+  function showCopyBox(data) {
+    recCopyBox.value = data; recCopyBox.hidden = false; recCopyBox.focus(); recCopyBox.select();
+  }
+  function copyAll() {
+    if (!loadList().length) { flash('아직 기록이 없습니다'); return; }
+    var data = exportPayload();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(data).then(function () { flash('복사했습니다'); }, function () { showCopyBox(data); });
+    } else { showCopyBox(data); }
+  }
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if (records && !records.hidden) { records.hidden = true; busyFlags.records = false; }
+      else if (survey && !survey.hidden) closeSurvey(false);
+    }
+    if (e.key === '`' && panelToggle && panelAllowed()) {
+      var t = e.target;
+      if (t && t.closest && t.closest('input:not([type="range"]), textarea, select')) return;
+      e.preventDefault(); panelToggle();
+    }
+  });
+
+  // ---------- 공개 ----------
+  window.Playtest = {
+    meta: META,
+    tuningDef: TUNING_DEF,
+    defaults: defaults,
+    tuning: tuning,
+    timeScale: timeScale,
+    // 튜닝 패널은 열어 둔 채로 플레이하며 값을 바꿀 수 있어야 하므로 busy에 넣지 않는다
+    get busy() { return busyFlags.survey || busyFlags.records; },
+    onTuning: function (fn) { if (typeof fn === 'function') listeners.push(fn); },
+    setTuning: setTuning,
+    logTuningChange: logTuningChange,
+    resetTuning: resetTuning,
+    start: start,
+    log: log,
+    end: end,
+    current: function () { return session; },
+    sessions: loadList,
+    panelAllowed: panelAllowed,
+    _registerPanel: function (toggle, setOpen) { panelToggle = toggle; Playtest._panelOpen = setOpen; applyPanelRule(); },
+    _setPanelBusy: function (v) { busyFlags.panel = !!v; },
+    _flash: flash
+  };
+
+  buildBar();
+  buildSurvey();
+  buildRecords();
+  buildTesterSlot();
+  renderBar();
+  applyPanelRule();
+})();
+
+</script>
+<script>/* tuning-panel.js */
+/*
+ * tuning-panel.js — 튜닝 패널
+ * tuning.json의 변수마다 슬라이더를 만든다. 값을 바꾸면 게임에 바로 들어가고,
+ * 한 판 도중에 바꾸면 그 판 기록에 tuning_change 사건과 tuning_changed = true가 남는다.
+ * 열기: 오른쪽 위 "튜닝" 버튼 또는 ` 키. 누가 볼 수 있는지는 빌드가 정한다
+ * (play.html 끔, play-dev.html 켬, publish.html 아티팩트 주인만).
+ * 튜닝을 바꾼 판은 판정에서 빠지고 따로 집계된다.
+ * 이 파일은 게임마다 고치지 않는다.
+ */
+(function () {
+  'use strict';
+  if (!window.Playtest) return;
+  var P = window.Playtest;
+  var vars = (P.tuningDef && P.tuningDef.vars) || {};
+  var names = Object.keys(vars);
+  if (!names.length) return;
+
+  function h(tag, attrs, kids) {
+    var el = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) {
+      if (k === 'text') el.textContent = attrs[k];
+      else if (k === 'hidden') el.hidden = !!attrs[k];
+      else el.setAttribute(k, attrs[k]);
+    });
+    (kids || []).forEach(function (c) { if (c) el.appendChild(c); });
+    return el;
+  }
+  function fmt(v, step) {
+    var s = Number(step) || 1;
+    var d = s >= 1 ? 0 : Math.min(4, String(s).split('.')[1] ? String(s).split('.')[1].length : 2);
+    return Number(v).toFixed(d);
+  }
+
+  var rows = {};
+  var list = h('div', { class: 'pt-tune-list' });
+  names.forEach(function (name) {
+    var d = vars[name];
+    var id = 'pt-t-' + name.replace(/[^0-9A-Za-z_-]/g, '_');
+    var min = isFinite(d.min) ? d.min : 0;
+    var max = isFinite(d.max) ? d.max : Math.max(1, Number(d.value) * 2);
+    var step = isFinite(d.step) ? d.step : (max - min) / 100;
+    var out = h('output', { for: id, class: 'pt-tune-val' });
+    var range = h('input', { type: 'range', id: id, min: String(min), max: String(max), step: String(step) });
+    range.value = String(P.tuning[name]);
+    var from = null;
+    range.addEventListener('pointerdown', function () { from = P.tuning[name]; });
+    range.addEventListener('focus', function () { from = P.tuning[name]; });
+    range.addEventListener('input', function () {
+      if (from === null) from = P.tuning[name];
+      P.setTuning(name, Number(range.value), { log: false });
+      paint(name);
+    });
+    range.addEventListener('change', function () {
+      P.logTuningChange(name, from === null ? P.defaults[name] : from, P.tuning[name]);
+      from = P.tuning[name];
+    });
+    // 마우스로 옮긴 뒤에는 포커스를 놓아, 방향키가 슬라이더 대신 게임으로 가게 한다
+    range.addEventListener('pointerup', function () { setTimeout(function () { range.blur(); }, 0); });
+    var row = h('div', { class: 'pt-tune-row' }, [
+      h('div', { class: 'pt-tune-head' }, [
+        h('label', { for: id, text: d.label || name }),
+        out
+      ]),
+      range,
+      h('p', { class: 'pt-tune-meta', text: name + ' · 기본 ' + fmt(P.defaults[name], step) + (d.unit ? ' ' + d.unit : '') + ' · ' + fmt(min, step) + '~' + fmt(max, step) }),
+      d.why ? h('p', { class: 'pt-tune-why', text: d.why }) : null
+    ]);
+    rows[name] = { range: range, out: out, step: step, unit: d.unit || '' };
+    list.appendChild(row);
+  });
+
+  function paint(name) {
+    var r = rows[name]; if (!r) return;
+    r.out.textContent = fmt(P.tuning[name], r.step) + (r.unit ? ' ' + r.unit : '');
+    var changed = P.tuning[name] !== P.defaults[name];
+    r.out.classList.toggle('pt-changed', changed);
+  }
+  function paintAll() { names.forEach(function (n) { rows[n].range.value = String(P.tuning[n]); paint(n); }); }
+
+  var reset = h('button', { type: 'button', class: 'pt-btn', id: 'pt-tune-reset', text: '기본값으로' });
+  var close = h('button', { type: 'button', class: 'pt-btn', id: 'pt-tune-close', text: '닫기' });
+  var panel = h('aside', { class: 'pt-tune', id: 'pt-tune', hidden: true, 'aria-labelledby': 'pt-tune-title' }, [
+    h('div', { class: 'pt-tune-top' }, [h('h2', { id: 'pt-tune-title', text: '튜닝' }), close]),
+    h('p', { class: 'pt-sub', text: '바꾼 값은 바로 들어갑니다. 기본값이 아닌 값으로 한 판은 판정에서 빠지고 따로 집계됩니다.' }),
+    list,
+    h('div', { class: 'pt-actions' }, [reset])
+  ]);
+  document.body.appendChild(panel);
+
+  function setOpen(open) {
+    panel.hidden = !open;
+    P._setPanelBusy(open);
+    if (open) paintAll();
+  }
+  close.addEventListener('click', function () { setOpen(false); });
+  reset.addEventListener('click', function () { P.resetTuning(); paintAll(); P._flash('기본값으로 돌렸습니다'); });
+  P.onTuning(function (name) { if (!panel.hidden) paint(name); });
+  P._registerPanel(function () { setOpen(panel.hidden); }, setOpen);
+  paintAll();
+})();
+
+</script>
+<script>/* map.js */
+/* map.js — 개발/map_src/gen_map.py가 만든다. 손으로 고치지 않는다.
+ * 5층은 원본 8.3 평면도를 옮겼고, 1·6·7층은 원본 공간 문법(8.2, 11.2)으로 그린 초안이다. */
+window.PON_MAP = {"schema": "pon-map-v1", "tile_m": 1.0, "start": {"floor": 1, "x": 25.5, "y": 17.5, "facing": 0.0}, "arrive": {"x": 41.2, "y": 17.5, "facing": 3.14159}, "floors": {"1": {"id": 1, "name": "1층 경비실·로비", "w": 47, "h": 36, "grid": ["###############################################", "###############################################", "###############################################", "###############################################", "###############################################", "###############################################", "###############################################", "###############################################", "###############################################", "###############################################", "##############################.........########", "##############################.........########", "##############################.........########", "##############################.........########", "######################.......#.........########", "######################.......#.........#...SSS#", "######################.....................SSS#", "######################T....................SSS#", "######################T....................SSS#", "######################.......#.........#...SSS#", "######################.......#.........########", "##############################.........########", "##############################.........########", "##############################.........########", "##############################.........########", "###############################################", "###############################################", "###############################################", "###############################################", "###############################################", "###############################################", "###############################################", "###############################################", "###############################################", "###############################################", "###############################################"], "rooms": [{"name": "경비실", "x0": 22, "y0": 14, "x1": 28, "y1": 20, "dead_end": false}, {"name": "로비", "x0": 30, "y0": 10, "x1": 38, "y1": 24, "dead_end": false}, {"name": "중앙 계단", "x0": 40, "y0": 15, "x1": 45, "y1": 19, "dead_end": false}], "lights": [{"x": 29.5, "y": 17.5, "r": 2.2, "k": 0.9}, {"x": 41.5, "y": 17.5, "r": 3.5, "k": 0.9}, {"x": 25.5, "y": 17.5, "r": 4.5, "k": 1.0}, {"x": 34.5, "y": 13.5, "r": 5.0, "k": 0.8}, {"x": 34.5, "y": 21.5, "r": 5.0, "k": 0.8}], "objects": [], "anomalies": [], "zones": {"core": [[39, 15, 45, 19]], "terminal": [[22, 16, 24, 19]]}}, "5": {"id": 5, "name": "5층 입원 병동 A", "w": 47, "h": 36, "grid": ["###############################################", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "#####..#####..######..######..####..####......#", "#.............................................#", "#......................................########", "#......................................#......#", "########...##..#####..###..####..###...#......#", "#......#...#.....#.....#.....#.....#..........#", "#..........#.....#.....#.....#.....#..........#", "#..........#.....#.....#.....#.....#...#......#", "#......#...#.....#.....#.....#.....#...########", "########...#.....#.....#.....#.....#...#...SSS#", "#......#...#########################.......SSS#", "#..........#########################.......SSS#", "#..........#########################.......SSS#", "#......#...#########################...#...SSS#", "#......#...#.....#.....#.....#.....#...########", "########...#.....#.....#.....#.....#..........#", "#..........#.....#.....#.....#.....#..........#", "#..........#.....#.....#.....#.....#...#......#", "#......#...#.....#.....#.....#.....#...#......#", "########...###..####..####..####..##...########", "#......................................#......#", "#.............................................#", "#.............................................#", "####..####..########..######..#####..###......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......########", "###############################################"], "rooms": [{"name": "병실 9", "x0": 1, "y0": 1, "x1": 7, "y1": 5, "dead_end": true}, {"name": "병실 10", "x0": 9, "y0": 1, "x1": 15, "y1": 5, "dead_end": true}, {"name": "병실 11", "x0": 17, "y0": 1, "x1": 23, "y1": 5, "dead_end": true}, {"name": "병실 12", "x0": 25, "y0": 1, "x1": 31, "y1": 5, "dead_end": true}, {"name": "병실 13", "x0": 33, "y0": 1, "x1": 38, "y1": 5, "dead_end": true}, {"name": "병실 14", "x0": 1, "y0": 30, "x1": 7, "y1": 34, "dead_end": true}, {"name": "병실 15", "x0": 9, "y0": 30, "x1": 15, "y1": 34, "dead_end": true}, {"name": "병실 16", "x0": 17, "y0": 30, "x1": 23, "y1": 34, "dead_end": true}, {"name": "병실 17", "x0": 25, "y0": 30, "x1": 31, "y1": 34, "dead_end": true}, {"name": "병실", "x0": 33, "y0": 30, "x1": 38, "y1": 34, "dead_end": true}, {"name": "공용화장실", "x0": 1, "y0": 11, "x1": 6, "y1": 14, "dead_end": true}, {"name": "휴게실", "x0": 1, "y0": 16, "x1": 6, "y1": 20, "dead_end": true}, {"name": "공용화장실", "x0": 1, "y0": 22, "x1": 6, "y1": 24, "dead_end": true}, {"name": "병실 1", "x0": 12, "y0": 11, "x1": 16, "y1": 15, "dead_end": true}, {"name": "병실 5", "x0": 12, "y0": 20, "x1": 16, "y1": 24, "dead_end": true}, {"name": "병실 2", "x0": 18, "y0": 11, "x1": 22, "y1": 15, "dead_end": true}, {"name": "병실 6", "x0": 18, "y0": 20, "x1": 22, "y1": 24, "dead_end": true}, {"name": "병실 3", "x0": 24, "y0": 11, "x1": 28, "y1": 15, "dead_end": true}, {"name": "병실 7", "x0": 24, "y0": 20, "x1": 28, "y1": 24, "dead_end": true}, {"name": "병실 4", "x0": 30, "y0": 11, "x1": 34, "y1": 15, "dead_end": true}, {"name": "병실 8", "x0": 30, "y0": 20, "x1": 34, "y1": 24, "dead_end": true}, {"name": "처치실", "x0": 40, "y0": 1, "x1": 45, "y1": 7, "dead_end": true}, {"name": "간호사실", "x0": 40, "y0": 9, "x1": 45, "y1": 13, "dead_end": true}, {"name": "병동 입구 (중앙 계단)", "x0": 40, "y0": 15, "x1": 45, "y1": 19, "dead_end": false}, {"name": "병동 데스크", "x0": 40, "y0": 21, "x1": 45, "y1": 24, "dead_end": true}, {"name": "회진 준비실", "x0": 40, "y0": 26, "x1": 45, "y1": 33, "dead_end": true}], "lights": [{"x": 6.0, "y": 6.5, "r": 2.2, "k": 0.45}, {"x": 13.0, "y": 6.5, "r": 2.2, "k": 0.45}, {"x": 21.0, "y": 6.5, "r": 2.2, "k": 0.45}, {"x": 29.0, "y": 6.5, "r": 2.2, "k": 0.45}, {"x": 35.0, "y": 6.5, "r": 2.2, "k": 0.45}, {"x": 5.0, "y": 29.5, "r": 2.2, "k": 0.45}, {"x": 11.0, "y": 29.5, "r": 2.2, "k": 0.45}, {"x": 21.0, "y": 29.5, "r": 2.2, "k": 0.45}, {"x": 29.0, "y": 29.5, "r": 2.2, "k": 0.45}, {"x": 36.0, "y": 29.5, "r": 2.2, "k": 0.45}, {"x": 7.5, "y": 13.0, "r": 2.2, "k": 0.35}, {"x": 7.5, "y": 18.0, "r": 2.2, "k": 0.35}, {"x": 7.5, "y": 23.0, "r": 2.2, "k": 0.35}, {"x": 14.0, "y": 10.5, "r": 2.2, "k": 0.45}, {"x": 15.0, "y": 25.5, "r": 2.2, "k": 0.45}, {"x": 21.0, "y": 10.5, "r": 2.2, "k": 0.45}, {"x": 21.0, "y": 25.5, "r": 2.2, "k": 0.45}, {"x": 26.0, "y": 10.5, "r": 2.2, "k": 0.45}, {"x": 27.0, "y": 25.5, "r": 2.2, "k": 0.45}, {"x": 32.0, "y": 10.5, "r": 2.2, "k": 0.45}, {"x": 33.0, "y": 25.5, "r": 2.2, "k": 0.45}, {"x": 39.5, "y": 7.5, "r": 2.2, "k": 0.4}, {"x": 39.5, "y": 12.0, "r": 2.2, "k": 0.5}, {"x": 41.5, "y": 17.5, "r": 3.5, "k": 0.9}, {"x": 39.5, "y": 22.0, "r": 2.2, "k": 0.5}, {"x": 39.5, "y": 28.0, "r": 2.2, "k": 0.35}], "objects": [{"id": "F5_BED01", "kind": "bed", "x": 2.5, "y": 2.0, "cue": 0.0, "label": ""}, {"id": "F5_BED02", "kind": "bed", "x": 10.5, "y": 2.0, "cue": 0.0, "label": ""}, {"id": "F5_BED03", "kind": "bed", "x": 18.5, "y": 2.0, "cue": 0.0, "label": ""}, {"id": "F5_BED04", "kind": "bed", "x": 26.5, "y": 2.0, "cue": 0.0, "label": ""}, {"id": "F5_BED05", "kind": "bed", "x": 34.5, "y": 2.0, "cue": 0.0, "label": ""}, {"id": "F5_BED06", "kind": "bed", "x": 2.5, "y": 33.0, "cue": 0.0, "label": ""}, {"id": "F5_BED07", "kind": "bed", "x": 10.5, "y": 33.0, "cue": 0.0, "label": ""}, {"id": "F5_BED08", "kind": "bed", "x": 18.5, "y": 33.0, "cue": 0.0, "label": ""}, {"id": "F5_BED09", "kind": "bed", "x": 26.5, "y": 33.0, "cue": 0.0, "label": ""}, {"id": "F5_BED10", "kind": "bed", "x": 34.5, "y": 33.0, "cue": 0.0, "label": ""}, {"id": "F5_BED11", "kind": "bed", "x": 13.6, "y": 12.0, "cue": 0.0, "label": ""}, {"id": "F5_BED12", "kind": "bed", "x": 13.6, "y": 23.0, "cue": 0.0, "label": ""}, {"id": "F5_BED13", "kind": "bed", "x": 19.6, "y": 12.0, "cue": 0.0, "label": ""}, {"id": "F5_BED14", "kind": "bed", "x": 19.6, "y": 23.0, "cue": 0.0, "label": ""}, {"id": "F5_BED15", "kind": "bed", "x": 25.6, "y": 12.0, "cue": 0.0, "label": ""}, {"id": "F5_BED16", "kind": "bed", "x": 25.6, "y": 23.0, "cue": 0.0, "label": ""}, {"id": "F5_BED17", "kind": "bed", "x": 31.6, "y": 12.0, "cue": 0.0, "label": ""}, {"id": "F5_BED18", "kind": "bed", "x": 31.6, "y": 23.0, "cue": 0.0, "label": ""}, {"id": "F5_DEC1", "kind": "device", "x": 26.6, "y": 12.4, "cue": 0.3, "label": "병실 3 의료 기구"}, {"id": "F5_DEC2", "kind": "board", "x": 41.0, "y": 21.2, "cue": 0.3, "label": "병동 데스크 게시판"}, {"id": "F5_DEC3", "kind": "device", "x": 12.2, "y": 31.4, "cue": 0.3, "label": "병실 15 의료 기구"}, {"id": "F5_DEC4", "kind": "board", "x": 44.4, "y": 9.8, "cue": 0.0, "label": "간호사실 게시판"}], "anomalies": [{"id": "PHN_017", "name": "환자 정보 자가 변경", "kind": "board", "x": 43.4, "y": 12.2, "end": "Timer", "active_r": 4.5, "cap_m": null, "origin": "Direct", "need_dark": false}, {"id": "PHN_035", "name": "시간차 기록 출력", "kind": "printer", "x": 43.2, "y": 23.0, "end": "WorkEnd", "active_r": 4.5, "cap_m": null, "origin": "Residual", "need_dark": false}, {"id": "PHN_018", "name": "의료 기구 오작동", "kind": "device", "x": 20.6, "y": 11.8, "end": "Timer", "active_r": 5.5, "cap_m": null, "origin": "Direct", "need_dark": false}], "zones": {"core": [[39, 15, 45, 19]], "cr04_area": [[0, 0, 46, 35]], "cr04_trigger": [[33, 7, 35, 9], [33, 26, 35, 28]], "dead_end_stub": [[1, 7, 7, 9], [1, 26, 7, 28]]}}, "6": {"id": 6, "name": "6층 중환자실", "w": 47, "h": 36, "grid": ["###############################################", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "####..######..######..######..#####..###......#", "#.............................................#", "#......................................########", "#......................................#......#", "#...gggggggggggggggggggggggggggggggg...#......#", "#...g..............................g..........#", "#...g..............................g..........#", "#...g..............................g...#......#", "#...g..............................g...########", "#...g..............................g...#...SSS#", "#...g..............................g.......SSS#", "#..........................................SSS#", "#..........................................SSS#", "#...g..............................g...#...SSS#", "#...g..............................g...########", "#...g..............................g..........#", "#...g..............................g..........#", "#...g..............................g...#......#", "#...g..............................g...#......#", "#...gggggggggggggggggggggggggggggggg...########", "#......................................#......#", "#.............................................#", "#.............................................#", "####..######..######..######..#####..###......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......#......#", "#.......#.......#.......#.......#......########", "###############################################"], "rooms": [{"name": "장비실", "x0": 1, "y0": 1, "x1": 7, "y1": 5, "dead_end": true}, {"name": "약제실", "x0": 9, "y0": 1, "x1": 15, "y1": 5, "dead_end": true}, {"name": "오염물 처리실", "x0": 17, "y0": 1, "x1": 23, "y1": 5, "dead_end": true}, {"name": "보호자 상담실", "x0": 25, "y0": 1, "x1": 31, "y1": 5, "dead_end": true}, {"name": "린넨실", "x0": 33, "y0": 1, "x1": 38, "y1": 5, "dead_end": true}, {"name": "격리실 1", "x0": 1, "y0": 30, "x1": 7, "y1": 34, "dead_end": true}, {"name": "격리실 2", "x0": 9, "y0": 30, "x1": 15, "y1": 34, "dead_end": true}, {"name": "격리실 3", "x0": 17, "y0": 30, "x1": 23, "y1": 34, "dead_end": true}, {"name": "기록실", "x0": 25, "y0": 30, "x1": 31, "y1": 34, "dead_end": true}, {"name": "직원 휴게실", "x0": 33, "y0": 30, "x1": 38, "y1": 34, "dead_end": true}, {"name": "중환자실", "x0": 5, "y0": 11, "x1": 34, "y1": 24, "dead_end": false}, {"name": "처치 구역", "x0": 40, "y0": 1, "x1": 45, "y1": 7, "dead_end": true}, {"name": "간호 스테이션", "x0": 40, "y0": 9, "x1": 45, "y1": 13, "dead_end": true}, {"name": "중앙 계단", "x0": 40, "y0": 15, "x1": 45, "y1": 19, "dead_end": false}, {"name": "처치실", "x0": 40, "y0": 21, "x1": 45, "y1": 24, "dead_end": true}, {"name": "보호자 대기실", "x0": 40, "y0": 26, "x1": 45, "y1": 33, "dead_end": true}], "lights": [{"x": 5.0, "y": 6.5, "r": 2.2, "k": 0.3}, {"x": 13.0, "y": 6.5, "r": 2.2, "k": 0.3}, {"x": 21.0, "y": 6.5, "r": 2.2, "k": 0.3}, {"x": 29.0, "y": 6.5, "r": 2.2, "k": 0.3}, {"x": 36.0, "y": 6.5, "r": 2.2, "k": 0.3}, {"x": 5.0, "y": 29.5, "r": 2.2, "k": 0.3}, {"x": 13.0, "y": 29.5, "r": 2.2, "k": 0.3}, {"x": 21.0, "y": 29.5, "r": 2.2, "k": 0.3}, {"x": 29.0, "y": 29.5, "r": 2.2, "k": 0.3}, {"x": 36.0, "y": 29.5, "r": 2.2, "k": 0.3}, {"x": 9.6, "y": 12.5, "r": 1.8, "k": 0.35}, {"x": 9.6, "y": 22.5, "r": 1.8, "k": 0.35}, {"x": 16.6, "y": 12.5, "r": 1.8, "k": 0.35}, {"x": 16.6, "y": 22.5, "r": 1.8, "k": 0.35}, {"x": 23.6, "y": 12.5, "r": 1.8, "k": 0.35}, {"x": 23.6, "y": 22.5, "r": 1.8, "k": 0.35}, {"x": 30.6, "y": 12.5, "r": 1.8, "k": 0.35}, {"x": 30.6, "y": 22.5, "r": 1.8, "k": 0.35}, {"x": 39.5, "y": 7.5, "r": 2.2, "k": 0.3}, {"x": 39.5, "y": 12.0, "r": 2.2, "k": 0.6}, {"x": 41.5, "y": 17.5, "r": 3.5, "k": 0.9}, {"x": 39.5, "y": 22.0, "r": 2.2, "k": 0.3}, {"x": 39.5, "y": 28.0, "r": 2.2, "k": 0.4}], "objects": [{"id": "F6_BED1", "kind": "bed", "x": 8.0, "y": 12.5, "cue": 0.0, "label": ""}, {"id": "F6_BED2", "kind": "bed", "x": 8.0, "y": 22.5, "cue": 0.0, "label": ""}, {"id": "F6_MON2", "kind": "monitor", "x": 9.6, "y": 23.0, "cue": 0.0, "label": ""}, {"id": "F6_BED3", "kind": "bed", "x": 15.0, "y": 12.5, "cue": 0.0, "label": ""}, {"id": "F6_MON3", "kind": "monitor", "x": 16.6, "y": 12.0, "cue": 0.0, "label": ""}, {"id": "F6_BED4", "kind": "bed", "x": 15.0, "y": 22.5, "cue": 0.0, "label": ""}, {"id": "F6_MON4", "kind": "monitor", "x": 16.6, "y": 23.0, "cue": 0.0, "label": ""}, {"id": "F6_BED5", "kind": "bed", "x": 22.0, "y": 12.5, "cue": 0.0, "label": ""}, {"id": "F6_MON5", "kind": "monitor", "x": 23.6, "y": 12.0, "cue": 0.0, "label": ""}, {"id": "F6_BED6", "kind": "bed", "x": 22.0, "y": 22.5, "cue": 0.0, "label": ""}, {"id": "F6_MON6", "kind": "monitor", "x": 23.6, "y": 23.0, "cue": 0.0, "label": ""}, {"id": "F6_BED7", "kind": "bed", "x": 29.0, "y": 12.5, "cue": 0.0, "label": ""}, {"id": "F6_MON7", "kind": "monitor", "x": 30.6, "y": 12.0, "cue": 0.0, "label": ""}, {"id": "F6_BED8", "kind": "bed", "x": 29.0, "y": 22.5, "cue": 0.0, "label": ""}, {"id": "F6_MON8", "kind": "monitor", "x": 30.6, "y": 23.0, "cue": 0.0, "label": ""}, {"id": "F6_DEC1", "kind": "monitor", "x": 23.6, "y": 23.0, "cue": 0.3, "label": "모니터"}, {"id": "F6_DEC2", "kind": "pump", "x": 13.0, "y": 18.0, "cue": 0.3, "label": "수액 펌프"}, {"id": "F6_DEC3", "kind": "pump", "x": 30.0, "y": 16.5, "cue": 0.0, "label": "수액 펌프"}], "anomalies": [{"id": "PHN_022", "name": "중환자 데이터 이상", "kind": "monitor", "x": 9.6, "y": 12.0, "end": "Timer", "active_r": 6.0, "cap_m": 6.0, "origin": "Direct", "need_dark": false}, {"id": "PHN_024", "name": "수혈 장비 이상", "kind": "pump", "x": 19.5, "y": 17.5, "end": "WorkEnd", "active_r": 6.0, "cap_m": null, "origin": "Residual", "need_dark": false}, {"id": "PHN_034", "name": "병상 그림자 출몰", "kind": "shadow", "x": 30.4, "y": 22.6, "end": "Timer", "active_r": 5.0, "cap_m": null, "origin": "Direct", "need_dark": false}], "zones": {"core": [[39, 15, 45, 19]], "cr05_area": [[0, 0, 46, 35]]}}, "7": {"id": 7, "name": "7층 재활 치료", "w": 47, "h": 36, "grid": ["###############################################", "#........#........#........#...........#......#", "#........#........#........#...........#......#", "#........#........#........#...........#......#", "#........#........#........#...........#......#", "#........#........#........#...........#......#", "####..#######..#######..########...#####......#", "#.............................................#", "#......................................########", "#..............oo...........oo.........#......#", "#......................................#......#", "#.............................................#", "#..oooooo..oooooo...ooooooo..oooooo...........#", "#..oooooo..oooooo...ooooooo..oooooo....#......#", "#......................................########", "#......................................#...SSS#", "#.....oo.........oo............oo..........SSS#", "#..........................................SSS#", "#...........oo...........oo................SSS#", "#......................................#...SSS#", "#......................................########", "#.ooooo..ooooooo..oooooo...ooooooo............#", "#.ooooo..ooooooo..oooooo...ooooooo............#", "#......................................#......#", "#..................................oo..#......#", "#........oo.........oo.................########", "#......................................#......#", "#.............................................#", "#.............................................#", "######..###########..###########..######......#", "#............#............#............#......#", "#............#............#............#......#", "#............#............#............#......#", "#............#............#............#......#", "#............#............#............########", "###############################################"], "rooms": [{"name": "개별 치료실 1", "x0": 1, "y0": 1, "x1": 8, "y1": 5, "dead_end": true}, {"name": "개별 치료실 2", "x0": 10, "y0": 1, "x1": 17, "y1": 5, "dead_end": true}, {"name": "개별 치료실 3", "x0": 19, "y0": 1, "x1": 26, "y1": 5, "dead_end": true}, {"name": "욕조실", "x0": 28, "y0": 1, "x1": 38, "y1": 5, "dead_end": true}, {"name": "재활운동실", "x0": 1, "y0": 7, "x1": 38, "y1": 28, "dead_end": false}, {"name": "영상 치료실", "x0": 1, "y0": 30, "x1": 12, "y1": 34, "dead_end": true}, {"name": "탈의실", "x0": 14, "y0": 30, "x1": 25, "y1": 34, "dead_end": true}, {"name": "수치료 대기실", "x0": 27, "y0": 30, "x1": 38, "y1": 34, "dead_end": true}, {"name": "상담실", "x0": 40, "y0": 1, "x1": 45, "y1": 7, "dead_end": true}, {"name": "접수", "x0": 40, "y0": 9, "x1": 45, "y1": 13, "dead_end": true}, {"name": "중앙 계단", "x0": 40, "y0": 15, "x1": 45, "y1": 19, "dead_end": false}, {"name": "창고", "x0": 40, "y0": 21, "x1": 45, "y1": 24, "dead_end": true}, {"name": "휴게 공간", "x0": 40, "y0": 26, "x1": 45, "y1": 33, "dead_end": true}], "lights": [{"x": 5.0, "y": 6.5, "r": 2.2, "k": 0.3}, {"x": 14.0, "y": 6.5, "r": 2.2, "k": 0.3}, {"x": 23.0, "y": 6.5, "r": 2.2, "k": 0.3}, {"x": 33.5, "y": 6.5, "r": 2.2, "k": 0.3}, {"x": 10, "y": 9.5, "r": 3.0, "k": 0.35}, {"x": 30, "y": 9.5, "r": 3.0, "k": 0.3}, {"x": 5, "y": 18, "r": 3.0, "k": 0.25}, {"x": 22, "y": 17, "r": 3.0, "k": 0.25}, {"x": 34, "y": 19, "r": 3.0, "k": 0.3}, {"x": 14, "y": 26, "r": 3.0, "k": 0.3}, {"x": 20.0, "y": 29.5, "r": 2.2, "k": 0.3}, {"x": 33.0, "y": 29.5, "r": 2.2, "k": 0.3}, {"x": 6.5, "y": 30.8, "r": 3.2, "k": 0.55}, {"x": 39.5, "y": 7.5, "r": 2.2, "k": 0.3}, {"x": 39.5, "y": 12.0, "r": 2.2, "k": 0.5}, {"x": 41.5, "y": 17.5, "r": 3.5, "k": 0.9}, {"x": 39.5, "y": 28.0, "r": 2.2, "k": 0.35}], "objects": [{"id": "F7_EQ1", "kind": "equip", "x": 4.5, "y": 10.5, "cue": 0.0, "label": ""}, {"id": "F7_EQ2", "kind": "equip", "x": 14.5, "y": 15.5, "cue": 0.0, "label": ""}, {"id": "F7_EQ3", "kind": "equip", "x": 24.5, "y": 10.5, "cue": 0.0, "label": ""}, {"id": "F7_EQ4", "kind": "equip", "x": 33.5, "y": 14.5, "cue": 0.0, "label": ""}, {"id": "F7_EQ5", "kind": "equip", "x": 7.5, "y": 24.5, "cue": 0.0, "label": ""}, {"id": "F7_EQ6", "kind": "equip", "x": 24.5, "y": 24.5, "cue": 0.0, "label": ""}, {"id": "F7_EQ7", "kind": "equip", "x": 36.5, "y": 10.5, "cue": 0.0, "label": ""}, {"id": "F7_DEC1", "kind": "equip", "x": 27.5, "y": 15.5, "cue": 0.3, "label": "재활 기구"}, {"id": "F7_DEC2", "kind": "water", "x": 30.0, "y": 3.5, "cue": 0.3, "label": "욕조"}, {"id": "F7_DEC3", "kind": "speaker", "x": 22.5, "y": 3.0, "cue": 0.3, "label": "치료실 3 스피커"}], "anomalies": [{"id": "PHN_026", "name": "기구 자동 회전", "kind": "equip", "x": 19.5, "y": 17.5, "end": "WorkEnd", "active_r": 7.0, "cap_m": null, "origin": "Residual", "need_dark": false}, {"id": "PHN_028", "name": "물 표면 이상", "kind": "water", "x": 35.5, "y": 3.0, "end": "Timer", "active_r": 5.0, "cap_m": null, "origin": "Direct", "need_dark": false}, {"id": "PHN_030", "name": "환자 음성 반복", "kind": "speaker", "x": 13.5, "y": 3.0, "end": "WorkEnd", "active_r": 6.0, "cap_m": null, "origin": "Residual", "need_dark": false}, {"id": "PHN_042", "name": "영상 내 환영", "kind": "screen", "x": 6.5, "y": 30.4, "end": "WorkEnd", "active_r": 5.0, "cap_m": null, "origin": "Residual", "need_dark": true}], "zones": {"core": [[39, 15, 45, 19]], "video_room": [[1, 30, 12, 34], [6, 29, 7, 29]]}}}, "disabled_floors": [2, 3, 4, 8]};
+
+</script>
+<script>/* game.js */
+/*
+ * game.js — Pulse of Night 5일차 탑다운 그레이박스
+ * 원본: 팀 프로젝트 기획(UE5, 1인칭) `기획/원본/`. 절 번호는 원본 문서의 절이다.
+ *
+ * 지킬 것 (개인프로젝트/CLAUDE.md "웹 코드 원칙")
+ *  1. 조정할 수 있는 값은 전부 Playtest.tuning에서 읽는다
+ *  2. 게임 시간은 실제 dt * Playtest.timeScale. 잘게 나눠 돌린다
+ *  3. 의미 있는 행동은 Playtest.log, 한 판 끝은 Playtest.end(결말, 결과, 다음)
+ *  4. Playtest.busy일 때와 입력 칸에 글을 쓰는 중에는 입력을 받지 않는다. 키는 e.code
+ *  5. 시작 버튼 data-pt-start
+ * 사건 데이터의 gt는 게임 시간(초)이다. 사건의 t는 실제 시간이라 빨리 감기(AI 플레이어)에서 다르다.
+ *
+ * AI 플레이어 연결: window.PON.perceive()는 지금 화면에 보이는 것만 돌려준다.
+ * 보이지 않는 괴이의 위치, 어느 물건이 이상현상인지는 주지 않는다(보이는 '이상해 보임' 정도만).
+ */
+(function () {
+  'use strict';
+  var P = window.Playtest;
+  var T = P.tuning;
+  var MAP = window.PON_MAP;
+  var DEG = Math.PI / 180;
+  // 지표 정의(판정 문턱)는 playtest.json의 metric_defs에 둔다. 실험계획이 이 값을 가리킨다
+  var MD = (P.meta && P.meta.metric_defs) || {};
+  function md(k, d) { return MD[k] !== undefined ? MD[k] : d; }
+
+  // ---------- 화면 ----------
+  var W = 800, H = 500, PX = 22;          // 논리 좌표, 1m = 22px (그림 배율. 규칙에 영향 없음)
+  var canvas = document.getElementById('game');
+  var ctx = canvas.getContext('2d');
+  var $ = function (id) { return document.getElementById(id); };
+  var hud = $('hud'), hudL = $('hud-l'), hudR = $('hud-r'), sub = $('sub'), rhythm = $('rhythm'), toast = $('toast');
+  var startScreen = $('start-screen'), startBtn = $('start-btn'), lastResult = $('last-result');
+  var floorMenu = $('floor-menu'), floorButtons = $('floor-buttons'), shiftMenu = $('shift-menu');
+  var endScreen = $('end-screen'), endTitle = $('end-title'), endText = $('end-text'), endBtn = $('end-btn');
+  $('game-ver').textContent = P.meta.build + ' ' + P.meta.version;
+  var ORDER = '근무 지시(5일차): 5층 입원 병동과 6층 중환자실을 우선 순찰. 7층 재활층은 여유가 있으면 확인. 이상현상은 촬영해 보고하고, 1층 경비실 단말기에서 퇴근.';
+  $('order-text').textContent = ORDER;
+
+  var C = {};
+  function readColors() {
+    var cs = getComputedStyle(document.documentElement);
+    ['--game-bg', '--game-fg', '--game-muted', '--game-accent', '--game-item', '--game-soft', '--game-floor', '--game-wall',
+      '--game-mem-floor', '--game-mem-wall', '--game-glass', '--game-danger', '--game-odd', '--game-shade'].forEach(function (k) {
+      C[k.slice(7)] = cs.getPropertyValue(k).trim() || '#888';
+    });
+  }
+  readColors();
+  if (window.matchMedia) {
+    var mq = window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq.addEventListener) mq.addEventListener('change', readColors);
+  }
+  new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  function resize() {
+    var r = canvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.round(r.width * dpr));
+    canvas.height = Math.max(1, Math.round(r.height * dpr));
+    ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- 지도 ----------
+  var FL = {};
+  Object.keys(MAP.floors).forEach(function (k) {
+    var f = MAP.floors[k];
+    var fl = { id: f.id, name: f.name, w: f.w, h: f.h, g: f.grid, rooms: f.rooms, lights: f.lights,
+      objects: f.objects, anomalies: f.anomalies, zones: f.zones, light: new Float32Array(f.w * f.h) };
+    FL[f.id] = fl;
+    // 고정 조명 지도: 광원에서 벽에 막히지 않은 칸만 밝다
+    fl.lights.forEach(function (L) {
+      var r = Math.ceil(L.r);
+      for (var y = Math.floor(L.y) - r; y <= Math.floor(L.y) + r; y++) {
+        for (var x = Math.floor(L.x) - r; x <= Math.floor(L.x) + r; x++) {
+          if (x < 0 || y < 0 || x >= fl.w || y >= fl.h) continue;
+          var d = Math.hypot(x + 0.5 - L.x, y + 0.5 - L.y);
+          if (d > L.r) continue;
+          if (!losClear(fl, L.x, L.y, x + 0.5, y + 0.5, true)) continue;
+          var v = L.k * (1 - 0.6 * d / L.r);
+          var i = y * fl.w + x;
+          if (v > fl.light[i]) fl.light[i] = v;
+        }
+      }
+    });
+  });
+
+  function tile(fl, x, y) {
+    x = Math.floor(x); y = Math.floor(y);
+    if (x < 0 || y < 0 || x >= fl.w || y >= fl.h) return '#';
+    return fl.g[y].charAt(x);
+  }
+  function blocksMove(c) { return c === '#' || c === 'g' || c === 'o'; }
+  function blocksSight(c) { return c === '#' || c === 'o'; }
+  // 두 점 사이에 시야를 막는 칸이 있는가. 끝 칸은 보는 대상이라 막는 칸으로 치지 않는다
+  function losClear(fl, x0, y0, x1, y1, skipEnd) {
+    var tx = Math.floor(x1), ty = Math.floor(y1);
+    var dx = x1 - x0, dy = y1 - y0;
+    var x = Math.floor(x0), y = Math.floor(y0);
+    var stepX = dx > 0 ? 1 : -1, stepY = dy > 0 ? 1 : -1;
+    var tMaxX = dx !== 0 ? ((stepX > 0 ? x + 1 - x0 : x0 - x) / Math.abs(dx)) : Infinity;
+    var tMaxY = dy !== 0 ? ((stepY > 0 ? y + 1 - y0 : y0 - y) / Math.abs(dy)) : Infinity;
+    var tDX = dx !== 0 ? 1 / Math.abs(dx) : Infinity, tDY = dy !== 0 ? 1 / Math.abs(dy) : Infinity;
+    for (var n = 0; n < 64; n++) {
+      if (x === tx && y === ty) return true;
+      if (tMaxX < tMaxY) { tMaxX += tDX; x += stepX; } else { tMaxY += tDY; y += stepY; }
+      if (x === tx && y === ty) return skipEnd ? true : !blocksSight(tile(fl, x, y));
+      if (blocksSight(tile(fl, x, y))) return false;
+    }
+    return true;
+  }
+  function inRects(rects, x, y) {
+    if (!rects) return false;
+    for (var i = 0; i < rects.length; i++) {
+      var r = rects[i];
+      if (x >= r[0] && x < r[2] + 1 && y >= r[1] && y < r[3] + 1) return true;
+    }
+    return false;
+  }
+  function roomAt(fl, x, y) {
+    for (var i = 0; i < fl.rooms.length; i++) {
+      var r = fl.rooms[i];
+      if (x >= r.x0 && x < r.x1 + 1 && y >= r.y0 && y < r.y1 + 1) return r;
+    }
+    return null;
+  }
+  function angDiff(a, b) { var d = (b - a) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI; return d; }
+
+  // ---------- 상태 ----------
+  var S = null;
+  var mode = 'ready';     // ready | play | floor_menu | shift_menu | travel | end
+  var BEATS = ['B01', 'B02', 'B03', 'B04', 'B05'];
+
+  function newState() {
+    var st = MAP.start;
+    var s = {
+      gt: 0, floor: st.floor, x: st.x, y: st.y, facing: st.facing, moveAng: st.facing, moving: false,
+      flashOn: false, flashPct: 100, tabletPct: 100, flashOnT: 0,
+      equip: 'none', equipT: 0, prevFlash: false,
+      seen: {}, visited: {}, tileVisit: {}, firstVisit: [], visitedUpper: false, videoVisited: false,
+      anomalies: [], cr04: { active: false, ever: false, theta: 0, visT: 0, inTrig: false, startT: 0, startS: 0, stillT: 0, revDeg: 0 },
+      cr05: { phase: 'safe', t: 0, count: 0, hit: false, started: false }, deathCause: '',
+      segs: [], seg: null, headHist: [], faceHist: [], lastLookback: -99, flashSwitches: 0, viewT: 0, cr04Stuck: 0,
+      trail: [], travel: 0, lastDeadRoomT: -99, cr04First: null, newSeen: 0, lastNewSeen: 0,
+      stops: 0, retreats: 0, backtrack: 0, deadEnds: 0,
+      idleT: 0, moveT: 0, dirHist: [], lastRetreat: -9, room: null, onStairs: true, onTerminal: false,
+      correct: 0, falseRep: 0, missed: 0, travelTo: null, travelT: 0, dead: null, toastT: 0, subT: 0, subI: 0
+    };
+    Object.keys(FL).forEach(function (k) {
+      s.seen[k] = new Uint8Array(FL[k].w * FL[k].h);
+      s.tileVisit[k] = new Uint8Array(FL[k].w * FL[k].h);
+      FL[k].anomalies.forEach(function (a) {
+        s.anomalies.push({ def: a, floor: Number(k), state: 'wait', t: 0, reported: false, seenOnce: false });
+      });
+    });
+    return s;
+  }
+
+  // ---------- 입력 ----------
+  var keys = {};
+  var mouse = { x: W / 2, y: H / 2, movedAt: -99, inside: false };
+  var pending = { light: false, tablet: false, shoot: false, enter: false };
+  var controller = null;      // AI 플레이어가 PON.setController로 단다
+
+  var KEYMAP = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ShiftLeft: 'run', ShiftRight: 'run' };
+  function typing(e) { return e.target && e.target.closest && e.target.closest('input, textarea, select'); }
+  window.addEventListener('keydown', function (e) {
+    if (P.busy || typing(e)) return;
+    var k = KEYMAP[e.code];
+    if (k && mode === 'play') { keys[k] = true; e.preventDefault(); return; }
+    if (mode !== 'play') {
+      if (mode === 'floor_menu' && /^Digit[1-8]$/.test(e.code)) { chooseFloor(Number(e.code.slice(5))); e.preventDefault(); }
+      if (mode === 'floor_menu' && e.code === 'Escape') { chooseFloor(S.floor); e.preventDefault(); }
+      if (mode === 'shift_menu' && e.code === 'Escape') { chooseShift('patrol'); }
+      return;
+    }
+    if (e.code === 'KeyF') { pending.light = true; e.preventDefault(); }
+    else if (e.code === 'KeyE') { pending.tablet = true; e.preventDefault(); }
+    else if (e.code === 'Space') { pending.shoot = true; e.preventDefault(); }
+    else if (e.code === 'Enter' || e.code === 'NumpadEnter') { pending.enter = true; e.preventDefault(); }
+  });
+  window.addEventListener('keyup', function (e) { var k = KEYMAP[e.code]; if (k) keys[k] = false; });
+  function toLogical(e) {
+    var r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width * W, y: (e.clientY - r.top) / r.height * H };
+  }
+  canvas.addEventListener('pointermove', function (e) {
+    var p = toLogical(e); mouse.x = p.x; mouse.y = p.y; mouse.movedAt = performance.now(); mouse.inside = true;
+  });
+  canvas.addEventListener('pointerdown', function (e) {
+    if (P.busy || mode !== 'play') return;
+    var p = toLogical(e); mouse.x = p.x; mouse.y = p.y; mouse.movedAt = performance.now();
+    if (e.button === 2) pending.tablet = true;
+    else if (S && (S.equip === 'aim')) pending.shoot = true;
+  });
+  canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  function humanIntent() {
+    var mx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+    var my = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+    var face = null;
+    if (mouse.movedAt > 0) face = Math.atan2(mouse.y - H / 2, mouse.x - W / 2);   // 마우스를 한 번이라도 쓰면 마우스 방향
+    var it = { mx: mx, my: my, run: !!keys.run, face: face, toggleLight: pending.light, toggleTablet: pending.tablet,
+      shoot: pending.shoot, enter: pending.enter };
+    pending.light = pending.tablet = pending.shoot = pending.enter = false;
+    return it;
+  }
+
+  // ---------- 판 시작과 끝 ----------
+  function start() {
+    S = newState();
+    mode = 'play';
+    startScreen.hidden = true; endScreen.hidden = true; floorMenu.hidden = true; shiftMenu.hidden = true;
+    hud.hidden = false; sub.hidden = true; rhythm.hidden = true; toast.hidden = true;
+    keys = {};
+    P.start();
+    if (window.__PON_AI && window.__PON_AI.persona) {
+      var A = window.__PON_AI;
+      P.log('ai_player', { persona: String(A.persona), seed: Number(A.seed) || 0, attempt: Number(A.attempt) || 1, knows: Object.keys(A.knows || {}).join(','), map_memory: A.memory ? 1 : 0 });
+    }
+    enterFloor(S.floor, true);
+  }
+
+  function log(type, data) { data = data || {}; data.gt = Math.round(S.gt * 10) / 10; P.log(type, data); }
+
+  function exposedNow() {
+    if (S.cr04.active) return true;
+    if (S.floor === 6 && mode !== 'travel' && (S.cr05.phase === 'grace' || S.cr05.phase === 'watch')) return true;
+    return false;
+  }
+  // ---------- 구간 기록과 비트 판별 ----------
+  // 판 도중에는 '구간'(층·이동 중·CR_04 시작 여부·영상 치료실)만 쌓고, 비트는 판이 끝난 뒤 정한다(실험계획 '비트 판별 규칙')
+  function segKey() {
+    var fl = mode === 'travel' ? S.travelTo : S.floor;
+    var video = S.floor === 7 && mode !== 'travel' && inRects(FL[7].zones.video_room, S.x, S.y);
+    return (mode === 'travel' ? 'T' : 'F') + fl + '|' + (S.cr04.ever ? 1 : 0) + '|' + (video ? 1 : 0);
+  }
+  function addSeg(dt, exposed, constrained, active, view, ext) {
+    var k = segKey();
+    if (!S.seg || S.seg.key !== k) {
+      var p = k.split('|');
+      S.seg = { key: k, start: S.gt - dt, dur: 0, floor: Number(p[0].slice(1)), travel: p[0][0] === 'T', cr04: p[1] === '1', video: p[2] === '1',
+        thr: 0, act: 0, dens: 0, viewSum: 0, viewN: 0, peak: 0, hold: 0, newt: 0 };
+      S.segs.push(S.seg);
+    }
+    var g = S.seg;
+    g.dur += dt;
+    if (exposed) g.thr += dt;
+    if (constrained) g.act += dt;
+    g.dens += active * dt;
+    if (view !== null) { g.viewSum += view; g.viewN += 1; }
+    if (ext) {
+      // 겹침: 이 구간 안에서 켜진 이상현상이 동시에 몇 개 켜져 있었나(앞 비트에서 남은 것은 세지 않는다)
+      var born = 0;
+      S.anomalies.forEach(function (a) { if (a.floor === g.floor && a.state === 'active' && a.actT >= g.start) born += 1; });
+      if (born > g.peak) g.peak = born;
+      if (ext.hold) g.hold += dt;
+      g.newt += ext.newt;
+    }
+  }
+  function beatOfSegs(segs) {
+    // B05 시작: 마지막으로 위층(5·6·7)을 떠나는 순간. 그 마지막 위층 구간이 7층이고 그 안에서 영상 치료실에 들어갔으면 그 순간
+    var lastUp = -1;
+    for (var i = segs.length - 1; i >= 0; i--) if (!segs[i].travel && segs[i].floor !== 1) { lastUp = i; break; }
+    var b5 = segs.length;
+    if (lastUp >= 0) {
+      b5 = lastUp + 1;
+      if (segs[lastUp].floor === 7) {
+        var j = lastUp;
+        while (j - 1 >= 0 && !segs[j - 1].travel && segs[j - 1].floor === 7) j--;
+        // 마지막 7층 구간에서 영상 치료실에 '마지막으로' 들어간 순간(먼저 들렀다 나와 7층을 더 돌면 그 시간은 B04)
+        for (var q = lastUp; q >= j; q--) if (segs[q].video && (q === j || !segs[q - 1].video)) { b5 = q; break; }
+      }
+    }
+    var out = [], upperSeen = false;
+    for (var n = 0; n < segs.length; n++) {
+      var g = segs[n], b;
+      if (n >= b5) b = 'B05';
+      else {
+        var fl = g.floor;
+        if (fl === 1 && !g.travel) {
+          // 위층에 가기 전이면 B01, 근무 중간에 1층에 내려온 것이면 다음에 가는 위층의 비트로 친다
+          if (!upperSeen) b = 'B01';
+          else { b = null; for (var m = n + 1; m < b5; m++) if (segs[m].floor !== 1) { fl = segs[m].floor; b = upperBeat(segs[m]); break; } if (!b) b = 'B05'; }
+        } else b = fl === 1 ? (upperSeen ? 'B05' : 'B01') : upperBeat(g);
+        if (!g.travel && g.floor !== 1) upperSeen = true;
+      }
+      out.push(b);
+    }
+    return out;
+  }
+  function upperBeat(g) {
+    if (g.floor === 5) return g.cr04 ? 'B02' : 'B01';
+    if (g.floor === 6) return 'B03';
+    if (g.floor === 7) return 'B04';
+    return 'B01';
+  }
+  function resultsCommon() {
+    var on = S.gt > 0 ? Math.round(1000 * S.flashOnT / S.gt) / 10 : 0;
+    return {
+      correct: S.correct, false_reports: S.falseRep, cr05_detects: S.cr05.count,
+      flash_end_pct: Math.round(S.flashPct * 10) / 10, flash_on_pct: on, tablet_end_pct: Math.round(S.tabletPct * 10) / 10,
+      flash_switches: S.flashSwitches, flash_pct_per_min: S.gt > 0 ? Math.round(100 * (100 - S.flashPct) / (S.gt / 60)) / 100 : 0,
+      backtrack_m: Math.round(S.backtrack), dead_end_entries: S.deadEnds, stops: S.stops, retreats: S.retreats, cr04_stuck: S.cr04Stuck,
+      floors_visited: [5, 6, 7].filter(function (f) { return S.visited[f]; }).length
+    };
+  }
+
+  // 첫 조우: 방에서 들어섰나(1/0), 첫 추적이 끝날 때(또는 죽을 때)까지 걸린 초. 조우가 없으면 칸을 넣지 않는다
+  function addCr04Entry(r) {
+    var f = S.cr04First;
+    if (!f) return;
+    r.cr04_entry_room = f.from_room;
+    r.cr04_first_s = Math.round((f.end === null ? S.gt : f.end) - f.t);
+  }
+  function finishShift() {
+    // 퇴근 확정: 남은 이상현상은 모두 미보고로 확정한다(원본 6.3 "미보고 확정을 근무 종료보다 늦게 처리하지 않는다")
+    S.anomalies.forEach(function (a) {
+      if (!a.reported && a.state !== 'ended') { a.state = 'ended'; S.missed += 1; log('anomaly_end', { id: a.def.id, ok: 0, why: 'work_end' }); }
+    });
+    log('shift', { choice: 'leave' });
+    var r = resultsCommon();
+    r.play_s = Math.round(S.gt);
+    var pr = md('play_target_s', [1200, 1800]);
+    r.play_in_range = (r.play_s >= pr[0] && r.play_s <= pr[1]) ? 1 : 0;
+    var beats = beatOfSegs(S.segs), agg = {};
+    BEATS.forEach(function (b) { agg[b] = { s: 0, thr: 0, act: 0, dens: 0, vs: 0, vn: 0, peak: 0, hold: 0, newt: 0 }; });
+    S.segs.forEach(function (g, i) { var a = agg[beats[i]]; a.s += g.dur; a.thr += g.thr; a.act += g.act; a.dens += g.dens; a.vs += g.viewSum; a.vn += g.viewN;
+      a.peak = Math.max(a.peak, g.peak); a.hold += g.hold; a.newt += g.newt; });
+    var br = md('beat_range_s', [180, 420]), sr = md('share_range_pct', [10, 30]), excl = md('beats_exclude', []);
+    var inRange = 0, inShare = 0, counted = 0, ind = {};
+    BEATS.forEach(function (b, i) {
+      var n = i + 1, a = agg[b], t = a.s;
+      r['b' + n + '_s'] = Math.round(t);
+      r['b' + n + '_share'] = S.gt > 0 ? Math.round(1000 * t / S.gt) / 10 : 0;
+      r['b' + n + '_thr'] = t > 0 ? Math.round(1000 * a.thr / t) / 10 : 0;
+      r['b' + n + '_act'] = t > 0 ? Math.round(1000 * a.act / t) / 10 : 0;
+      r['b' + n + '_dens'] = t > 0 ? Math.round(100 * a.dens / t) / 100 : 0;
+      r['b' + n + '_view'] = a.vn > 0 ? Math.round(a.vs / a.vn) : 0;
+      r['b' + n + '_peak'] = a.peak;
+      r['b' + n + '_hold'] = t > 0 ? Math.round(1000 * a.hold / t) / 10 : 0;
+      r['b' + n + '_newt'] = t > 0 ? Math.round(10 * a.newt / (t / 60)) / 10 : 0;
+      ind[b] = { s: t, thr: r['b' + n + '_thr'], act: r['b' + n + '_act'], dens: r['b' + n + '_dens'], view: r['b' + n + '_view'],
+        peak: a.peak, hold: r['b' + n + '_hold'], newt: r['b' + n + '_newt'] };
+      if (excl.indexOf(b) < 0) {
+        counted += 1;
+        if (t >= br[0] && t <= br[1]) inRange += 1;
+        if (r['b' + n + '_share'] >= sr[0] && r['b' + n + '_share'] <= sr[1]) inShare += 1;
+      }
+    });
+    r.beats_in_range = inRange;
+    r.beats_ok = inRange >= md('beats_min', counted) ? 1 : 0;
+    // 비트 비율은 5·6·7층을 모두 간 판만 본다(7층을 건너뛰면 원본의 비트 구조가 생기지 않는다). 아니면 칸을 넣지 않는다
+    r.all_floors = r.floors_visited === 3 ? 1 : 0;
+    if (r.all_floors) r.share_ok = inShare >= md('beats_min', counted) ? 1 : 0;
+    // 원본이 크기 차이를 분명히 말한 쌍(실험계획에 미리 적음). 시간이 0인 비트가 낀 쌍은 세지 않는다
+    var pairs = md('pace_pairs', []), okN = 0, nN = 0;
+    pairs.forEach(function (pp) {
+      var A = ind[pp[1]], B = ind[pp[3]];
+      if (!A || !B || A.s <= 0 || B.s <= 0) return;
+      nN += 1;
+      var v1 = A[pp[0]], v2 = B[pp[0]];
+      if (pp[2] === '>' ? v1 > v2 : pp[2] === '<' ? v1 < v2 : pp[2] === '>=' ? v1 >= v2 : v1 <= v2) okN += 1;
+    });
+    r.pace_pairs_n = nN;
+    r.pace_pairs_ok = nN ? Math.round(100 * okN / nN) / 100 : 0;
+    r.pace_pairs_all = nN === pairs.length && okN === nN ? 1 : 0;
+    var o = S.firstVisit;
+    var i5 = o.indexOf(5), i6 = o.indexOf(6), i7 = o.indexOf(7);
+    r.order_ok = (i5 >= 0 && i6 >= 0 && i5 < i6 && (i7 < 0 || i6 < i7)) ? 1 : 0;
+    r.missed = S.missed;
+    r.trust_delta = Math.round((S.correct * T.trust_correct + S.falseRep * T.trust_false + S.missed * T.trust_missed) * 10) / 10;
+    r.cr04_trap_deaths = 0;
+    r.cr04_rule_deaths = 0;
+    addCr04Entry(r);
+    r.death_cr04 = 0; r.death_cr04_turn = 0; r.death_cr05 = 0;
+    endRound('clear', r, '퇴근 — 정산',
+      '근무 ' + Math.floor(S.gt / 60) + '분 ' + Math.round(S.gt % 60) + '초 · 정확 보고 ' + S.correct + ' · 오보고 ' + S.falseRep +
+      ' · 미보고 ' + S.missed + ' · 신뢰도 ' + (r.trust_delta >= 0 ? '+' : '') + r.trust_delta);
+  }
+
+  function maxHeadChange(windowS) {
+    var mx = 0;
+    S.headHist.forEach(function (h) { if (S.gt - h[0] <= windowS) mx = Math.max(mx, Math.abs(angDiff(h[1], S.moveAng))); });
+    return mx / DEG;
+  }
+  function nearDeadEnd(fl, x, y) {
+    // 막다른 방 안, 또는 그 문 칸(방 사각형 바로 바깥 1칸), 또는 복도 끝 자투리(지도 zones.dead_end_stub)
+    if (fl.zones && fl.zones.dead_end_stub && inRects(fl.zones.dead_end_stub, x, y)) return { name: '복도 끝 자투리' };
+    for (var i = 0; i < fl.rooms.length; i++) {
+      var r = fl.rooms[i];
+      if (!r.dead_end) continue;
+      if (x >= r.x0 - 1 && x < r.x1 + 2 && y >= r.y0 - 1 && y < r.y1 + 2) return r;
+    }
+    return null;
+  }
+  function die(cause) {
+    if (S.dead) return;
+    S.dead = cause;
+    var fl = FL[S.floor];
+    var room = roomAt(fl, S.x, S.y), near = nearDeadEnd(fl, S.x, S.y);
+    // 규칙을 지키다 죽은 CR_04 사망: 직전 lookback_window_s초 안에 일부러 돌아보지 않았는데 죽음(사망 규칙 그대로, 따로 문턱을 두지 않는다)
+    // 그중 막다른 곳(막다른 방, 그 문 칸, 복도 끝 자투리)에서 난 것이 '막혀서 생긴' 사망
+    var lookedBack = S.gt - S.lastLookback <= md('lookback_window_s', 1.0);
+    var ruleDeath = (cause === 'cr04' || cause === 'cr04_turn') && !lookedBack ? 1 : 0;
+    var trap = ruleDeath && near ? 1 : 0;
+    // 직전 1초 안의 최대 고개 회전 빠르기: 0.05초 이상 떨어진 표본끼리 잰다(아주 짧은 걸음 때문에 부풀지 않게)
+    var turnRate = 0;
+    for (var i = 0; i < S.faceHist.length; i++) for (var j = i + 1; j < S.faceHist.length; j++) {
+      var a = S.faceHist[i], b = S.faceHist[j], dtt = b[0] - a[0];
+      if (dtt >= 0.05) { turnRate = Math.max(turnRate, Math.abs(angDiff(a[1], b[1])) / DEG / dtt); break; }
+    }
+    log('death', { cause: cause, trap: trap, room: room ? room.name : '', near_dead_end: near ? near.name : '',
+      face_move_deg: Math.round(Math.abs(angDiff(S.facing, S.moveAng)) / DEG), looked_back_1s: lookedBack ? 1 : 0,
+      head_change_deg: Math.round(maxHeadChange(3.0)), rev_deg: Math.round(S.cr04.revDeg), max_turn_deg_s: Math.round(turnRate),
+      // 사망 직전 이동 방향(0.5초 간격, 도) — 어떻게 돌다가 죽었는지 보려고
+      head_trace: S.headHist.filter(function (h, i) { return i % 30 === 0; }).map(function (h) { return [Math.round((h[0] - S.gt) * 10) / 10, Math.round(h[1] / DEG)]; }),
+      pos: [Math.round(S.x * 10) / 10, Math.round(S.y * 10) / 10],
+      moving: S.idleT < 0.3 ? 1 : 0, equip: S.equip });
+    var r = resultsCommon();
+    r.died_at_s = Math.round(S.gt);
+    r.missed = S.missed;
+    r.cr04_trap_deaths = trap;
+    r.cr04_rule_deaths = ruleDeath;
+    addCr04Entry(r);
+    r.death_cr04 = cause === 'cr04' ? 1 : 0;
+    r.death_cr04_turn = cause === 'cr04_turn' || cause === 'cr04_stop' ? 1 : 0;
+    r.death_cr05 = cause === 'cr05' ? 1 : 0;
+    r.death_floor = S.floor;
+    var text = cause === 'cr05' ? '태블릿 화면 너머에서 무언가가 이쪽을 알아챘다.'
+      : cause === 'cr04' ? '등 뒤에 있던 것을 똑바로 보고 말았다.'
+      : cause === 'cr04_stop' ? '멈춰 선 사이, 등 뒤의 것이 바로 옆까지 왔다.'
+      : '되돌아서는 순간, 뒤따라오던 것과 마주쳤다.';
+    endRound('fail', r, '근무 중 사망', text + ' (원본에서는 이 일차를 처음부터 다시 한다)');
+  }
+
+  function endRound(outcome, result, title, text) {
+    mode = 'end';
+    hud.hidden = true; sub.hidden = true; rhythm.hidden = true; toast.hidden = true;
+    floorMenu.hidden = true; shiftMenu.hidden = true;
+    endTitle.textContent = title; endText.textContent = text;
+    endScreen.hidden = false;
+    var done = false;
+    function go() {
+      if (done) return; done = true;
+      endScreen.hidden = true;
+      P.end(outcome, result, function () {
+        mode = 'ready';
+        lastResult.textContent = '지난 근무: ' + title + ' · ' + text;
+        lastResult.hidden = false;
+        startBtn.textContent = '다시 근무';
+        startScreen.hidden = false;
+        try { startBtn.focus(); } catch (e) { /* 무시 */ }
+      });
+    }
+    endBtn.onclick = go;
+    S.pendingEnd = go;
+    if (controller || window.__PLAYTEST_BOT) setTimeout(go, 30);
+    else try { endBtn.focus(); } catch (e) { /* 무시 */ }
+  }
+
+  // ---------- 층 이동 ----------
+  function enterFloor(f, first) {
+    S.floor = f;
+    if (!first) { S.x = MAP.arrive.x; S.y = MAP.arrive.y; S.facing = MAP.arrive.facing; S.moveAng = S.facing; }
+    S.onStairs = true;
+    if (f !== 1 && !S.visited[f]) { S.firstVisit.push(f); }
+    if (f !== 1) { S.visited[f] = true; S.visitedUpper = true; }
+    S.room = null; S.trail = [];
+    log('floor', { to: f });
+    if (f === 6 && !S.cr05.started) { S.cr05.started = true; S.cr05.phase = 'safe'; S.cr05.t = 0; }
+  }
+  function openFloorMenu() {
+    mode = 'floor_menu';
+    floorButtons.innerHTML = '';
+    [1, 2, 3, 4, 5, 6, 7, 8].forEach(function (f) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'opt'; b.textContent = f + '층' + (f === S.floor ? ' (지금)' : '');
+      if (MAP.disabled_floors.indexOf(f) >= 0) b.disabled = true;
+      b.setAttribute('data-floor', String(f));
+      b.addEventListener('click', function () { chooseFloor(f); });
+      floorButtons.appendChild(b);
+    });
+    var stay = document.createElement('button');
+    stay.type = 'button'; stay.className = 'opt'; stay.textContent = '그대로 있기';
+    stay.addEventListener('click', function () { chooseFloor(S.floor); });
+    floorButtons.appendChild(stay);
+    floorMenu.hidden = false;
+  }
+  function chooseFloor(f) {
+    if (mode !== 'floor_menu') return;
+    floorMenu.hidden = true;
+    if (MAP.disabled_floors.indexOf(f) >= 0 || !FL[f] || f === S.floor) { mode = 'play'; S.stairsLock = true; return; }
+    if (S.cr04.active) endCr04('floor');
+    mode = 'travel';
+    S.travelTo = f;
+    S.travelT = Math.abs(f - S.floor) * T.floor_travel_s;
+  }
+  function openShiftMenu() { mode = 'shift_menu'; shiftMenu.hidden = false; }
+  function chooseShift(v) {
+    if (mode !== 'shift_menu') return;
+    shiftMenu.hidden = true;
+    if (v === 'leave') { finishShift(); }
+    else { mode = 'play'; log('shift', { choice: 'patrol' }); }
+  }
+  Array.prototype.forEach.call(shiftMenu.querySelectorAll('[data-shift]'), function (b) {
+    b.addEventListener('click', function () { chooseShift(b.getAttribute('data-shift')); });
+  });
+
+  // ---------- 장비 ----------
+  function setLight(on) {
+    if (on === S.flashOn) return;
+    if (on) {
+      if (S.equip !== 'none' || S.flashPct <= 0) return;
+      S.flashPct = Math.max(0, S.flashPct - T.flashlight_switch_pct);
+      S.flashSwitches += 1;
+    }
+    S.flashOn = on;
+    log('light', { on: on ? 1 : 0, pct: Math.round(S.flashPct) });
+  }
+  function toggleTablet() {
+    if (S.equip === 'none') {
+      if (S.tabletPct <= 0) { showToast('태블릿 배터리가 없다'); return; }
+      S.prevFlash = S.flashOn;
+      if (S.flashOn) { S.flashOn = false; }
+      S.equip = 'drawing'; S.equipT = 0;
+      log('tablet', { s: 'draw' });
+    } else if (S.equip === 'aim') {
+      // 1인칭 월드 시야로 돌아오는 순간 직접 시야를 먼저 본다(원본 5.2)
+      if (S.cr04.active && cr04InView()) { die('cr04'); return; }
+      S.equip = 'stowing'; S.equipT = 0;
+      log('tablet', { s: 'stow' });
+    }
+  }
+  function shoot() {
+    if (S.equip !== 'aim') return;
+    S.tabletPct = Math.max(0, S.tabletPct - T.tablet_shot_pct);
+    var fl = FL[S.floor];
+    var best = null, bestOff = 1e9;
+    function consider(x, y, ref, cap) {
+      var d = Math.hypot(x - S.x, y - S.y);
+      if (d > cap) return;
+      var off = Math.abs(angDiff(S.facing, Math.atan2(y - S.y, x - S.x)));
+      if (off > T.capture_fov_deg * DEG / 2) return;
+      if (!losClear(fl, S.x, S.y, x, y, true)) return;
+      if (off < bestOff) { bestOff = off; best = ref; }
+    }
+    // 같은 거리면 이상현상이 먼저 잡히게 이상현상부터 본다
+    S.anomalies.forEach(function (a) { if (a.floor === S.floor) consider(a.def.x, a.def.y, { an: a }, a.def.cap_m || T.capture_dist_m); });
+    fl.objects.forEach(function (o) { consider(o.x, o.y, { obj: o }, T.capture_dist_m); });
+    var ok = !!(best && best.an && best.an.state === 'active');
+    S.equip = 'lock'; S.equipT = 0;
+    S.lockResult = { ok: ok, an: ok ? best.an : null, id: best ? (best.an ? best.an.def.id : best.obj.id) : '' };
+    log('report', { r: ok ? 'correct' : 'false', id: S.lockResult.id });
+  }
+  function finishLock() {
+    var res = S.lockResult; S.lockResult = null;
+    if (res.ok) {
+      res.an.reported = true; res.an.state = 'ended'; S.correct += 1;
+      log('anomaly_end', { id: res.an.def.id, ok: 1, why: 'report' });
+      showToast('보고 접수 — 이상 확인');
+    } else {
+      S.falseRep += 1;
+      showToast('보고 접수 — 이상 없음 (오보고)');
+    }
+    S.equip = 'aim'; S.equipT = 0;
+  }
+  function showToast(t) { toast.textContent = t; toast.hidden = false; S.toastT = 2.2; }
+
+  // ---------- 괴이 ----------
+  // 원본 7.4: 판정점 5개(머리·가슴·골반·좌우 어깨) 중 하나라도 시야 안이면 사망. 탑다운에서는 몸 폭만큼 시야각을 넓혀 본다
+  function cr04InView() { return Math.abs(angDiff(S.facing, S.cr04.theta)) < T.view_fov_deg * DEG / 2 + T.cr04_body_half_deg * DEG; }
+  function endCr04(why) {
+    if (!S.cr04.active) return; S.cr04.active = false; S.cr04.visT = 0;
+    if (S.cr04First && S.cr04First.end === null) S.cr04First.end = S.gt;
+    log('cr04', { phase: 'end', why: why });
+  }
+  var CR04_SUBS = ['(바로 뒤에서 발소리)', '(환자복이 스치는 소리)', '(뒤에서 숨소리)', '(마른기침)'];
+
+  // 자취에서 걸은 거리 sd 지점의 위치(보간)와, sEnd에서 끝나는 길이 len 구간의 순변위 방향(너무 짧으면 null)
+  function trailPos(sd) {
+    var tr = S.trail;
+    if (!tr.length || sd >= S.travel) return { x: S.x, y: S.y };
+    if (sd <= tr[0].s) return tr[0];
+    for (var i = tr.length - 1; i > 0; i--) if (tr[i - 1].s <= sd) { var a = tr[i - 1], b = tr[i], k = (sd - a.s) / Math.max(1e-6, b.s - a.s); return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k }; }
+    return tr[0];
+  }
+  function chunkDir(sEnd, len) {
+    if (!S.trail.length || sEnd - len < S.trail[0].s - 1e-6) return null;
+    var a = trailPos(sEnd - len), b = trailPos(sEnd), dx = b.x - a.x, dy = b.y - a.y;
+    return Math.hypot(dx, dy) < len * 0.5 ? null : Math.atan2(dy, dx);
+  }
+  function updateCr04(dt) {
+    var c = S.cr04, fl = FL[S.floor];
+    var inArea = S.floor === 5 && inRects(fl.zones.cr04_area, S.x, S.y) && !inRects(fl.zones.core, S.x, S.y);
+    if (!inArea) { if (c.active) endCr04('leave'); c.inTrig = false; return; }
+    var trig = inRects(fl.zones.cr04_trigger, S.x, S.y);
+    if (!c.active && trig && !c.inTrig) {
+      // 나타나는 자리는 '보는 방향의 뒤'(1인칭 원본에서 등 뒤 = 시야 반대). 그다음 진행 방향의 뒤로 cr04_turn_deg_s로 옮겨 간다.
+      // 탑다운에서는 걸으며 옆·뒤를 볼 수 있어, 진행 방향의 뒤에 바로 세우면 소리를 듣기 전에 즉사할 수 있다
+      c.active = true; c.ever = true; c.theta = S.facing + Math.PI; c.visT = 0; c.startT = S.gt; c.startS = S.travel; c.stillT = 0; c.revDeg = 0;
+      // 어디서 들어섰나: 직전 from_room_s초 안에 막다른 방에 있었으면 '방에서', 아니면 '복도에서'(정적 점검 4절의 예측을 가르는 값)
+      var fromRoom = S.gt - S.lastDeadRoomT <= md('from_room_s', 3.0) ? 1 : 0;
+      if (!S.cr04First) S.cr04First = { t: S.gt, from_room: fromRoom, end: null };
+      log('cr04', { phase: 'start', x: Math.round(S.x * 10) / 10, y: Math.round(S.y * 10) / 10, move_deg: Math.round(S.moveAng / DEG),
+        face_move_deg: Math.round(Math.abs(angDiff(S.facing, S.moveAng)) / DEG), from_room: fromRoom });
+    }
+    c.inTrig = trig;
+    if (!c.active) return;
+    // 일부러 돌아본 순간을 남긴다(막다른 곳 사망을 가를 때 쓴다)
+    if (Math.abs(angDiff(S.facing, S.moveAng)) >= md('lookback_deg', 150) * DEG) S.lastLookback = S.gt;
+    // 되돌아가기 규칙: 추적 중 걸어온 마지막 cr04_reverse_dist_m 안에서, cr04_reverse_chunk_m씩 끊어 잰 순변위 방향 중
+    // 지금 방향과 cr04_reverse_deg 넘게 다른 것이 있으면 뒤따라오던 것과 마주쳐 사망 (0이면 끔).
+    // 시간이 아니라 걸은 거리로 보므로 멈췄다 돌아서도 지워지지 않고, 짧게 미끄러진 걸음은 1m 순변위에 묻힌다. 조우 직전 1m(들어온 방향)도 센다
+    if (T.cr04_reverse_deg > 0) {
+      var Lc = T.cr04_reverse_chunk_m, now = chunkDir(S.travel, Lc);
+      if (now !== null) {
+        var mxh = 0, lo = Math.max(c.startS, S.trail.length ? S.trail[0].s + Lc : S.travel, S.travel - T.cr04_reverse_dist_m);
+        for (var se = S.travel - 0.25; se >= lo; se -= 0.25) { var dd = chunkDir(se, Lc); if (dd !== null) mxh = Math.max(mxh, Math.abs(angDiff(dd, now))); }
+        c.revDeg = mxh / DEG;
+        if (mxh >= T.cr04_reverse_deg * DEG) { die('cr04_turn'); return; }
+      }
+    }
+    // 추적 중 오래 멈춰 선 판(앞으로 갈 수도 되돌아갈 수도 없는 상태일 수 있다, 원본 8.4 소프트 락 금지)을 센다
+    if (S.idleT > md('cr04_stuck_s', 15) && !c.stuckLogged) { c.stuckLogged = true; S.cr04Stuck += 1; log('cr04_stuck', {}); }
+    if (S.idleT < md('stop_idle_s', 0.2)) c.stuckLogged = false;
+    // 정지 규칙(원본 11.2 B02 "멈추는 것이 곧 실패"): cr04_stop_lethal_s초 넘게 멈추면 사망 (0이면 끔, 원본 7.4를 따름)
+    if (T.cr04_stop_lethal_s > 0) {
+      if (S.idleT > md('stop_idle_s', 0.2)) { c.stillT += dt; if (c.stillT >= T.cr04_stop_lethal_s) { die('cr04_stop'); return; } } else c.stillT = 0;
+    }
+    var target = S.moveAng + Math.PI;
+    var d = angDiff(c.theta, target), maxStep = T.cr04_turn_deg_s * DEG * dt;
+    c.theta += Math.max(-maxStep, Math.min(maxStep, d));
+    var worldView = S.equip === 'none' || S.equip === 'drawing' || S.equip === 'stowing';
+    if (worldView && cr04InView()) {
+      c.visT += dt;
+      if (c.visT >= T.cr04_confirm_s) die('cr04');
+    } else c.visT = 0;
+  }
+
+  function updateCr05(dt) {
+    var c = S.cr05;
+    if (S.floor !== 6 || !c.started) return;          // 층을 나가면 멈췄다가 다시 이어진다(원본 7.2)
+    c.t += dt;
+    if (c.phase === 'safe' && c.t >= T.cr05_safe_s) { c.phase = 'grace'; c.t = 0; }
+    else if (c.phase === 'grace' && c.t >= T.cr05_grace_s) { c.phase = 'watch'; c.t = 0; c.hit = false; }
+    else if (c.phase === 'watch' && c.t >= T.cr05_watch_s) { c.phase = 'safe'; c.t = 0; }
+    if (c.phase === 'watch' && S.equip !== 'none' && !c.hit) {
+      c.hit = true; c.count += 1;
+      log('cr05_detect', { n: c.count });
+      if (c.count >= T.cr05_lethal_count) { die('cr05'); return; }
+      showToast('…화면 너머에서 무언가가 이쪽을 본다');
+    }
+  }
+
+  // ---------- 이상현상 ----------
+  function updateAnomalies(dt) {
+    S.anomalies.forEach(function (a) {
+      if (a.state === 'wait' && a.floor === S.floor && mode === 'play') {
+        if (Math.hypot(a.def.x - S.x, a.def.y - S.y) <= a.def.active_r) { a.state = 'active'; a.t = 0; a.actT = S.gt; log('anomaly_active', { id: a.def.id }); }
+      } else if (a.state === 'active') {
+        a.t += dt;
+        if (a.def.end === 'Timer' && a.t >= T.anomaly_active_s) {
+          a.state = 'ended'; S.missed += 1; log('anomaly_end', { id: a.def.id, ok: 0, why: 'timer' });
+        }
+      }
+    });
+  }
+  function anomalyCue(a) {
+    if (a.state !== 'active') return 0;
+    if (a.def.need_dark && S.flashOn) return 0;   // 영상 치료실: 손전등을 켜면 화면 반사로 환영이 안 보인다 (가정)
+    return 1;
+  }
+
+  // ---------- 시야 ----------
+  var vis = null, visFloor = -1, visStamp = -1;
+  function computeVision() {
+    var fl = FL[S.floor];
+    if (!vis || vis.length !== fl.w * fl.h) vis = new Float32Array(fl.w * fl.h);
+    vis.fill(0);
+    var fov = T.view_fov_deg * DEG / 2, cone = T.flash_cone_deg * DEG / 2;
+    var low = S.flashPct <= T.low_power_pct ? T.low_power_range_mul : 1;
+    var fc = T.flash_center_m * low, fm = T.flash_max_m * low;
+    var R = Math.ceil(Math.max(T.lit_sight_m, fm)) + 1;
+    var px = S.x, py = S.y, seen = S.seen[S.floor];
+    for (var ty = Math.floor(py) - R; ty <= Math.floor(py) + R; ty++) {
+      if (ty < 0 || ty >= fl.h) continue;
+      for (var tx = Math.floor(px) - R; tx <= Math.floor(px) + R; tx++) {
+        if (tx < 0 || tx >= fl.w) continue;
+        var cx = tx + 0.5, cy = ty + 0.5, d = Math.hypot(cx - px, cy - py);
+        var i = ty * fl.w + tx, b = 0;
+        if (d < T.near_sight_m) b = T.near_sight_k;   // 몸 바로 옆은 방향과 상관없이 어렴풋이 안다 (가정)
+        else {
+          var diff = Math.abs(angDiff(S.facing, Math.atan2(cy - py, cx - px)));
+          if (diff > fov) continue;
+          if (!losClear(fl, px, py, cx, cy, true)) continue;
+          var L = fl.light[i];
+          if (L > 0.05 && d <= T.lit_sight_m) b = Math.max(b, L);
+          if (S.flashOn && diff <= cone && d <= fm) b = Math.max(b, d <= fc ? 1.0 : 1.0 - 0.6 * (d - fc) / Math.max(0.1, fm - fc));
+          if (d <= T.dark_sight_m) b = Math.max(b, 0.28);
+        }
+        if (b > 0) { vis[i] = b; if (!seen[i]) { seen[i] = 1; S.newSeen += 1; } }
+      }
+    }
+    visFloor = S.floor; visStamp = S.gt;
+  }
+  function visibleAt(x, y) {
+    var fl = FL[S.floor];
+    var tx = Math.floor(x), ty = Math.floor(y);
+    if (tx < 0 || ty < 0 || tx >= fl.w || ty >= fl.h) return 0;
+    return vis ? vis[ty * fl.w + tx] : 0;
+  }
+
+  // ---------- 규칙 한 걸음 ----------
+  var it = null;
+  function update(dt) {
+    S.gt += dt;
+    it = controller ? (controller(dt) || {}) : humanIntent();
+    if (mode === 'travel') {
+      S.travelT -= dt;
+      tick(dt, false);
+      if (S.travelT <= 0) { mode = 'play'; enterFloor(S.travelTo, false); S.travelTo = null; }
+      return;
+    }
+    if (mode !== 'play') return;
+
+    // 괴이 판정을 장비 입력보다 먼저 한다(원본 5.2: 같은 순간이면 사망을 먼저 처리하고 촬영은 받지 않는다)
+    updateCr04(dt);
+    if (S.dead) return;
+    updateCr05(dt);
+    if (S.dead) return;
+
+    // 장비
+    if (it.toggleLight) setLight(!S.flashOn);
+    if (it.light === true || it.light === false) setLight(it.light);
+    if (it.toggleTablet) toggleTablet();
+    if (it.tablet === true && S.equip === 'none') toggleTablet();
+    if (it.tablet === false && S.equip === 'aim') toggleTablet();
+    if (S.dead) return;
+    if (it.shoot) shoot();
+    if (S.equip === 'drawing') { S.equipT += dt; if (S.equipT >= T.tablet_draw_s) { S.equip = 'aim'; S.equipT = 0; } }
+    else if (S.equip === 'lock') { S.equipT += dt; if (S.equipT >= T.capture_lock_s) finishLock(); }
+    else if (S.equip === 'stowing') {
+      S.equipT += dt;
+      // 넣으면 손전등을 다시 든다. 켜져 있던 손전등을 다시 켜는 것도 점등 전환이다(원본 5.3 1.0%/회)
+      if (S.equipT >= T.tablet_stow_s) { S.equip = 'none'; if (S.prevFlash) setLight(true); }
+    }
+
+    // 바라보는 방향
+    if (S.equip !== 'lock') {
+      if (it.face !== null && it.face !== undefined) S.facing = it.face;
+      else if (it.mx || it.my) {
+        var want = Math.atan2(it.my, it.mx), dd = angDiff(S.facing, want), mx = T.key_turn_rad_s * dt;
+        S.facing += Math.max(-mx, Math.min(mx, dd));
+      }
+    }
+
+    // 이동: 태블릿을 들고 있으면 못 움직인다(원본 5.2 상태별 조작 제한)
+    var canMove = S.equip === 'none';
+    var vx = canMove ? (it.mx || 0) : 0, vy = canMove ? (it.my || 0) : 0;
+    var len = Math.hypot(vx, vy);
+    var oldX = S.x, oldY = S.y;
+    if (len > 0.01) {
+      vx /= len; vy /= len;
+      var sp = (it.run ? T.run_speed : T.walk_speed) * Math.min(1, len);
+      moveBy(vx * sp * dt, vy * sp * dt);
+    }
+    var moved = Math.hypot(S.x - oldX, S.y - oldY);
+    // 걸어온 자취(0.1m마다). 되돌아가기 규칙은 시간이 아니라 걸은 거리로 본다(멈춰도 지워지지 않는다)
+    if (moved > 1e-6) {
+      S.travel += moved;
+      if (!S.trail.length || S.travel - S.trail[S.trail.length - 1].s >= 0.1) S.trail.push({ s: S.travel, x: S.x, y: S.y });
+      while (S.trail.length > 2 && S.travel - S.trail[1].s > T.cr04_reverse_dist_m + T.cr04_reverse_chunk_m + 1) S.trail.shift();
+    }
+    if (moved > 1e-6) {
+      var ang = Math.atan2(S.y - oldY, S.x - oldX);
+      var k = Math.min(1, dt * T.move_smooth_per_s);
+      S.moveAng += angDiff(S.moveAng, ang) * k;
+      S.headHist.push([S.gt, S.moveAng]);
+    }
+    while (S.headHist.length && S.gt - S.headHist[0][0] > 3.0) S.headHist.shift();   // 사망 기록용 진행 방향 3초(규칙에는 쓰지 않는다)
+    S.faceHist.push([S.gt, S.facing]);
+    while (S.faceHist.length && S.gt - S.faceHist[0][0] > 1.0) S.faceHist.shift();
+    tick(dt, true, moved);
+  }
+
+  function moveBy(dx, dy) {
+    var fl = FL[S.floor], r = T.body_radius_m;
+    function free(x, y) {
+      return !blocksMove(tile(fl, x - r, y - r)) && !blocksMove(tile(fl, x + r, y - r)) &&
+        !blocksMove(tile(fl, x - r, y + r)) && !blocksMove(tile(fl, x + r, y + r));
+    }
+    if (free(S.x + dx, S.y)) S.x += dx;
+    if (free(S.x, S.y + dy)) S.y += dy;
+  }
+
+  function tick(dt, onFloor, moved) {
+    // 배터리
+    if (S.flashOn) {
+      S.flashOnT += dt;
+      S.flashPct = Math.max(0, S.flashPct - T.flashlight_drain_pct_s * dt);
+      if (S.flashPct <= 0) { S.flashOn = false; log('light', { on: 0, pct: 0, why: 'empty' }); }
+    }
+    if (S.equip !== 'none') S.tabletPct = Math.max(0, S.tabletPct - T.tablet_drain_pct_s * dt);
+
+    // 구간 기록: 위협 시간, 행동 제약(태블릿을 들었거나 CR_04 추적 중 멈춤), 이 층에 켜진 이상현상 수, 보이는 칸 수(표본)
+    var view = null;
+    if (onFloor) {
+      S.viewT -= dt;
+      if (S.viewT <= 0) { S.viewT = md('view_sample_s', 1.0); computeVision(); var cnt = 0; for (var vi = 0; vi < vis.length; vi++) if (vis[vi] > 0) cnt += 1; view = cnt; }
+    }
+    var activeHere = 0;
+    if (onFloor) S.anomalies.forEach(function (a) { if (a.floor === S.floor && a.state === 'active') activeHere += 1; });
+    var constrained = onFloor && (S.equip !== 'none' || (S.cr04.active && S.idleT > md('stop_idle_s', 0.2)));
+    // 찍지 못하고 있는 시간: 켜진 이상현상이 촬영 거리 안에 보이는데 태블릿이 올라와 있지 않음(꺼내는 중·넣는 중 포함) + 판독 잠금 + CR_04 추적 중 정지.
+    // CR_05 리듬 때문에 기다리거나 넣은 시간이 여기에 잡힌다
+    var canShoot = false;
+    if (onFloor && (S.equip === 'none' || S.equip === 'drawing' || S.equip === 'stowing')) S.anomalies.forEach(function (a) {
+      if (a.floor === S.floor && a.state === 'active' && !a.reported && visibleAt(a.def.x, a.def.y) > 0 && anomalyCue(a) > 0 &&
+        Math.hypot(a.def.x - S.x, a.def.y - S.y) <= (a.def.cap_m || T.capture_dist_m)) canShoot = true;
+    });
+    var hold = onFloor && (S.equip === 'lock' || (S.cr04.active && S.idleT > md('stop_idle_s', 0.2)) || canShoot);
+    var newt = S.newSeen - S.lastNewSeen; S.lastNewSeen = S.newSeen;
+    addSeg(dt, exposedNow(), constrained, activeHere, view, onFloor ? { hold: hold, newt: newt } : { hold: false, newt: 0 });
+    if (S.toastT > 0) { S.toastT -= dt; if (S.toastT <= 0) toast.hidden = true; }
+    if (S.cr04.active) { S.subT -= dt; if (S.subT <= 0) { S.subT = 2.4; S.subI = (S.subI + 1) % CR04_SUBS.length; } }
+    if (!onFloor) return;
+
+    var fl = FL[S.floor];
+    // 정지·후퇴
+    if (moved > 1e-4) {
+      if (S.idleT >= 1.0 && S.moveT >= 1.0) { /* 이미 센 정지 */ }
+      S.moveT += dt; S.idleT = 0;
+      S.dirHist.push([S.gt, S.moveAng]);
+      while (S.dirHist.length && S.gt - S.dirHist[0][0] > md('retreat_window_s', 0.6)) S.dirHist.shift();
+      if (S.dirHist.length > 3 && S.gt - S.lastRetreat > md('retreat_debounce_s', 1.5) && Math.abs(angDiff(S.dirHist[0][1], S.moveAng)) > md('retreat_deg', 150) * DEG) {
+        S.retreats += 1; S.lastRetreat = S.gt; log('retreat', { floor: S.floor }); S.dirHist = [];
+      }
+      // 되돌아간 거리: 이미 지나간 칸을 다시 지나는 거리 (코어 제외)
+      var ti = Math.floor(S.y) * fl.w + Math.floor(S.x);
+      if (!inRects(fl.zones.core, S.x, S.y)) {
+        if (S.tileVisit[S.floor][ti]) S.backtrack += moved;
+        S.tileVisit[S.floor][ti] = 1;
+      }
+    } else {
+      var before = S.idleT;
+      S.idleT += dt;
+      var stopS = md('stop_s', 1.0);
+      if (before < stopS && S.idleT >= stopS && S.moveT >= stopS) { S.stops += 1; log('stop', { floor: S.floor }); S.moveT = 0; }
+    }
+    // 방 바뀜, 막다른 곳 진입
+    var room = roomAt(fl, S.x, S.y);
+    if (room && room.dead_end) S.lastDeadRoomT = S.gt;
+    if (room !== S.room) {
+      S.room = room;
+      if (room && room.dead_end) { S.deadEnds += 1; log('dead_end', { room: room.name }); }
+    }
+    if (S.floor === 7 && !S.videoVisited && inRects(fl.zones.video_room, S.x, S.y)) { S.videoVisited = true; log('video_room', {}); }
+    updateAnomalies(dt);
+
+    // 계단과 단말기
+    var onS = tile(fl, S.x, S.y) === 'S';
+    if (onS && !S.onStairs && !S.stairsLock) { S.onStairs = true; openFloorMenu(); return; }
+    if (!onS) { S.onStairs = false; S.stairsLock = false; }
+    S.onTerminal = S.floor === 1 && inRects(fl.zones.terminal, S.x, S.y);
+    if (S.onTerminal && it.enter) openShiftMenu();
+  }
+
+  // ---------- AI 플레이어 연결 ----------
+  // 화면에 그려지는 모습 그대로: 'odd' = 다른 색으로 떨림, 'tilted' = 살짝 기울어짐, 'plain' = 보통
+  function lookOf(cue) { return cue >= 0.9 ? 'odd' : cue > 0.2 ? 'tilted' : 'plain'; }
+  window.PON = {
+    setController: function (fn) { controller = fn; },
+    mode: function () { return mode; },
+    perceive: function () {
+      if (!S) return null;
+      if (visStamp !== S.gt || visFloor !== S.floor) computeVision();
+      var fl = FL[S.floor], tiles = [], litSum = 0, litN = 0;
+      for (var i = 0; i < vis.length; i++) if (vis[i] > 0) {
+        var tx = i % fl.w, ty = Math.floor(i / fl.w);
+        tiles.push([tx, ty, fl.g[ty].charAt(tx)]);
+        if (Math.hypot(tx + 0.5 - S.x, ty + 0.5 - S.y) < 6) { litSum += fl.light[i]; litN += 1; }
+      }
+      var objs = [];
+      fl.objects.forEach(function (o) { if (visibleAt(o.x, o.y) > 0) objs.push({ id: 'O' + o.x + '_' + o.y, kind: o.kind, x: o.x, y: o.y, look: lookOf(o.cue) }); });
+      S.anomalies.forEach(function (a) {
+        if (a.floor === S.floor && visibleAt(a.def.x, a.def.y) > 0) {
+          objs.push({ id: 'O' + a.def.x + '_' + a.def.y, kind: a.def.kind, x: a.def.x, y: a.def.y, look: lookOf(anomalyCue(a)) });
+          if (a.state === 'active' && !a.seenOnce && anomalyCue(a) > 0) { a.seenOnce = true; log('anomaly_seen', { id: a.def.id }); }
+        }
+      });
+      return {
+        gt: S.gt, mode: mode, floor: S.floor, w: fl.w, h: fl.h, x: S.x, y: S.y, facing: S.facing, moveAng: S.moveAng,
+        equip: S.equip, flashOn: S.flashOn, flashPct: S.flashPct, tabletPct: S.tabletPct,
+        tiles: tiles, ambient: litN ? litSum / litN : 0, objects: objs, onStairs: tile(fl, S.x, S.y) === 'S', onTerminal: S.onTerminal,
+        cues: { footsteps: S.cr04.active, footDir: S.cr04.active ? S.cr04.theta : null,
+          rhythm: S.floor === 6 && S.cr05.started ? ({ safe: 'steady', grace: 'off', watch: 'silent' })[S.cr05.phase] : null },
+        visited: { 5: !!S.visited[5], 6: !!S.visited[6], 7: !!S.visited[7] },
+        order: { priority: [5, 6], secondary: [7] }, lastToast: toast.hidden ? '' : toast.textContent,
+        // 이름표가 보인 방(사람은 지도에서 방 이름과 벽을 본다)
+        rooms: fl.rooms.filter(function (r) { var sn = S.seen[S.floor]; var cx = Math.floor((r.x0 + r.x1 + 1) / 2), cy = Math.floor((r.y0 + r.y1 + 1) / 2);
+          return sn[cy * fl.w + cx] || sn[r.y0 * fl.w + r.x0]; }).map(function (r) { return { name: r.name, x: (r.x0 + r.x1 + 1) / 2, y: r.y0 + 0.9 }; })   // 화면에 보이는 것: 이름표와 그 자리뿐(방 범위·막다른 방 여부는 주지 않는다)
+      };
+    },
+    // 시야 계산 없이 지금 자세만 (AI 플레이어가 매 걸음 쓴다)
+    pose: function () {
+      if (!S) return null;
+      return { gt: S.gt, mode: mode, floor: S.floor, x: S.x, y: S.y, facing: S.facing, moveAng: S.moveAng, equip: S.equip,
+        flashOn: S.flashOn, flashPct: S.flashPct, tabletPct: S.tabletPct, onTerminal: S.onTerminal,
+        cues: { footsteps: S.cr04.active, footDir: S.cr04.active ? S.cr04.theta : null,
+          rhythm: S.floor === 6 && S.cr05.started ? ({ safe: 'steady', grace: 'off', watch: 'silent' })[S.cr05.phase] : null } };
+    },
+    chooseFloor: function (f) { chooseFloor(f); },
+    chooseShift: function (v) { if (mode === 'play' && S.onTerminal) openShiftMenu(); chooseShift(v); },
+    endNow: function () { if (S && S.pendingEnd) S.pendingEnd(); }
+  };
+
+  // ---------- 그리기 ----------
+  function draw() {
+    ctx.fillStyle = C.bg;
+    ctx.fillRect(0, 0, W, H);
+    if (!S || mode === 'ready') return;
+    if (mode === 'travel') {
+      ctx.fillStyle = C.muted; ctx.font = '600 18px ' + getComputedStyle(document.body).fontFamily;
+      ctx.textAlign = 'center';
+      ctx.fillText('계단 이동 중… ' + S.travelTo + '층', W / 2, H / 2);
+      ctx.textAlign = 'left';
+      drawHud();
+      return;
+    }
+    computeVision();
+    var fl = FL[S.floor], seen = S.seen[S.floor];
+    var ox = W / 2 - S.x * PX, oy = H / 2 - S.y * PX;
+    var x0 = Math.max(0, Math.floor(-ox / PX)), x1 = Math.min(fl.w - 1, Math.ceil((W - ox) / PX));
+    var y0 = Math.max(0, Math.floor(-oy / PX)), y1 = Math.min(fl.h - 1, Math.ceil((H - oy) / PX));
+    for (var ty = y0; ty <= y1; ty++) {
+      for (var tx = x0; tx <= x1; tx++) {
+        var i = ty * fl.w + tx;
+        if (!seen[i]) continue;
+        var c = fl.g[ty].charAt(tx), v = vis[i];
+        var sx = ox + tx * PX, sy = oy + ty * PX;
+        if (v > 0) {
+          ctx.globalAlpha = 0.3 + 0.7 * Math.min(1, v);
+          ctx.fillStyle = c === '#' ? C.wall : c === 'o' ? C.soft : c === 'g' ? C.glass : C.floor;
+          ctx.fillRect(sx, sy, PX + 0.5, PX + 0.5);
+          if (c === '#') { ctx.globalAlpha = 1; ctx.strokeStyle = C.bg; ctx.lineWidth = 1; ctx.strokeRect(sx + 0.5, sy + 0.5, PX - 1, PX - 1); }
+          if (c === 'g') { ctx.globalAlpha = 1; ctx.strokeStyle = C.glass; ctx.lineWidth = 2; ctx.strokeRect(sx + 3, sy + 3, PX - 6, PX - 6); ctx.lineWidth = 1; }
+          if (c === 'S' || c === 'T') { ctx.fillStyle = C.accent; ctx.globalAlpha *= 0.6; ctx.fillRect(sx + 4, sy + 4, PX - 8, PX - 8); }
+          if (c === 'o') { ctx.strokeStyle = C.muted; ctx.globalAlpha = 0.8 * v; ctx.strokeRect(sx + 3, sy + 3, PX - 6, PX - 6); }
+          ctx.globalAlpha = 1;
+        } else {
+          ctx.fillStyle = c === '#' ? C['mem-wall'] : c === 'g' ? C['mem-wall'] : c === 'o' ? C['mem-wall'] : C['mem-floor'];
+          ctx.fillRect(sx, sy, PX + 0.5, PX + 0.5);
+          if (c === 'S' || c === 'T') { ctx.fillStyle = C.accent; ctx.globalAlpha = 0.25; ctx.fillRect(sx + 4, sy + 4, PX - 8, PX - 8); ctx.globalAlpha = 1; }
+        }
+      }
+    }
+    // 방 이름 (본 적 있는 방)
+    ctx.font = '11px ' + getComputedStyle(document.body).fontFamily;
+    ctx.fillStyle = C.muted; ctx.textAlign = 'center';
+    fl.rooms.forEach(function (r) {
+      var cx = (r.x0 + r.x1 + 1) / 2, cy = (r.y0 + r.y1 + 1) / 2;
+      if (seen[Math.floor(cy) * fl.w + Math.floor(cx)] || seen[r.y0 * fl.w + r.x0]) ctx.fillText(r.name, ox + cx * PX, oy + (r.y0 + 0.9) * PX);
+    });
+    ctx.textAlign = 'left';
+    // 물건과 이상현상: 지금 보이는 것만
+    var now = performance.now() / 1000;
+    fl.objects.forEach(function (o) { if (visibleAt(o.x, o.y) > 0) drawObj(o.kind, ox + o.x * PX, oy + o.y * PX, o.cue, now, o.id); });
+    S.anomalies.forEach(function (a) {
+      if (a.floor !== S.floor || visibleAt(a.def.x, a.def.y) <= 0) return;
+      var cue = anomalyCue(a);
+      if (a.state === 'active' && cue > 0 && !a.seenOnce) { a.seenOnce = true; log('anomaly_seen', { id: a.def.id }); }
+      drawObj(a.def.kind, ox + a.def.x * PX, oy + a.def.y * PX, cue, now, a.def.id);
+    });
+    // 플레이어와 시선
+    var px = W / 2, py = H / 2;
+    ctx.strokeStyle = C.fg; ctx.globalAlpha = 0.5; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(S.facing) * 34, py + Math.sin(S.facing) * 34); ctx.stroke();
+    ctx.globalAlpha = 1;
+    if (S.equip === 'aim' || S.equip === 'lock' || S.equip === 'drawing') {
+      var cf = T.capture_fov_deg * DEG / 2, cr = T.capture_dist_m * PX;
+      ctx.fillStyle = C.accent; ctx.globalAlpha = S.equip === 'aim' ? 0.18 : 0.08;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.arc(px, py, cr, S.facing - cf, S.facing + cf); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = C.accent;
+    ctx.beginPath(); ctx.arc(px, py, 0.32 * PX, 0, Math.PI * 2); ctx.fill();
+    // CR_04 신호: 등 뒤 방향의 붉은 호 (소리 대신)
+    if (S.cr04.active) {
+      var pulse = 0.35 + 0.25 * Math.sin(now * 6);
+      ctx.strokeStyle = C.danger; ctx.globalAlpha = pulse; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(px, py, 1.3 * PX, S.cr04.theta - 0.6, S.cr04.theta + 0.6); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.lineWidth = 1;
+    }
+    if (S.equip === 'lock') {
+      ctx.fillStyle = C.shade; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = C.fg; ctx.font = '600 16px ' + getComputedStyle(document.body).fontFamily; ctx.textAlign = 'center';
+      ctx.fillText('판독 중… 움직일 수 없다', W / 2, H / 2 - 40); ctx.textAlign = 'left';
+    }
+    drawHud();
+  }
+
+  function drawObj(kind, x, y, cue, now, id) {
+    var jit = cue >= 0.9 ? Math.sin(now * 9 + x) * 1.6 : 0;
+    var rot = cue >= 0.9 ? Math.sin(now * 2.2 + y) * 0.25 : (cue > 0.2 ? 0.2 : 0);
+    ctx.save();
+    ctx.translate(x + jit, y);
+    ctx.rotate(rot);
+    ctx.fillStyle = cue >= 0.9 ? C.odd : C.item;
+    ctx.strokeStyle = C.bg; ctx.lineWidth = 1;
+    var s = PX;
+    if (kind === 'bed') { ctx.fillStyle = C.soft; ctx.fillRect(-0.5 * s, -0.9 * s, 1.0 * s, 1.8 * s); ctx.strokeStyle = C.muted; ctx.strokeRect(-0.5 * s, -0.9 * s, 1.0 * s, 1.8 * s); }
+    else if (kind === 'board' || kind === 'screen') { ctx.fillRect(-0.6 * s, -0.2 * s, 1.2 * s, 0.4 * s); }
+    else if (kind === 'monitor' || kind === 'printer') { ctx.fillRect(-0.3 * s, -0.3 * s, 0.6 * s, 0.6 * s); ctx.strokeRect(-0.3 * s, -0.3 * s, 0.6 * s, 0.6 * s); }
+    else if (kind === 'water') { ctx.fillStyle = cue >= 0.9 ? C.odd : C.glass; ctx.fillRect(-0.9 * s, -0.5 * s, 1.8 * s, 1.0 * s); }
+    else if (kind === 'shadow') { ctx.fillStyle = cue >= 0.9 ? C.odd : C.soft; ctx.beginPath(); ctx.ellipse(0, 0, 0.7 * s, 0.35 * s, 0, 0, Math.PI * 2); ctx.fill(); }
+    else { ctx.beginPath(); ctx.arc(0, 0, 0.3 * s, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  }
+
+  function drawHud() {
+    var fl = FL[mode === 'travel' ? S.floor : S.floor];
+    var eq = { none: '', drawing: ' · 태블릿 꺼내는 중', aim: ' · 태블릿 조준 (Space 촬영)', lock: ' · 판독 중', stowing: ' · 태블릿 넣는 중' }[S.equip];
+    hudL.textContent = fl.name + ' · 손전등 ' + Math.floor(S.flashPct) + '%' + (S.flashOn ? ' 켬' : ' 끔') + ' · 태블릿 ' + Math.floor(S.tabletPct) + '%' + eq;
+    hudR.textContent = (S.onTerminal ? 'Enter: 단말기 · ' : '') + '근무 지시: 5·6층 우선, 7층 보조';
+    // 자막
+    var line = '';
+    if (S.cr04.active) line = CR04_SUBS[S.subI];
+    if (S.floor === 7 && mode === 'play') {
+      S.anomalies.forEach(function (a) {
+        if (a.def.id === 'PHN_030' && a.state === 'active' && Math.hypot(a.def.x - S.x, a.def.y - S.y) < T.voice_cue_m) line = '(어딘가에서 같은 말을 되풀이하는 목소리)';
+      });
+    }
+    sub.textContent = line; sub.hidden = !line;
+    if (S.floor === 6 && S.cr05.started && mode === 'play') {
+      rhythm.hidden = false;
+      rhythm.textContent = ({ safe: '♪ 삐 — 삐 — 삐 —', grace: '♪ 삐-삐삐 — 삐 (리듬이 어긋난다)', watch: '♪ … … … (전자음이 멈췄다)' })[S.cr05.phase];
+      rhythm.style.color = S.cr05.phase === 'safe' ? '' : C.danger;
+    } else rhythm.hidden = true;
+  }
+
+  startBtn.addEventListener('click', start);
+
+  // ---------- 루프 ----------
+  var last = performance.now();
+  function frame(now) {
+    var raw = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if ((mode === 'play' || mode === 'travel') && !P.busy) {
+      var dt = raw * P.timeScale;
+      var step = 1 / 60;
+      while (dt > 0 && (mode === 'play' || mode === 'travel')) { var s = Math.min(step, dt); update(s); dt -= s; }
+    } else if (controller && (mode === 'floor_menu' || mode === 'shift_menu') && !P.busy) {
+      controller(0);      // 메뉴에서는 게임 시간이 흐르지 않는다. AI 플레이어가 고를 수 있게 한 번 부른다
+    }
+    draw();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+</script>
