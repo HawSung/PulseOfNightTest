@@ -117,6 +117,7 @@
   .tools label { display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
   .top { padding-right: 0; flex-wrap: wrap; }
   .hud .r { max-width: 62%; }
+  .sub { background: rgba(8,9,12,.78); padding: 3px 12px; border-radius: 6px; }
   .screen .dim { color: var(--game-muted); font-weight: 400; }
   .screen .new { color: var(--game-item); font-weight: 600; }
   .screen b { color: var(--game-fg); }
@@ -1061,10 +1062,17 @@ window.PON_DAYS = [{"day":1,"play_min":15,"max_intensity":2,"priority":"◎○�
     else { ctx.beginPath(); ctx.arc(0, 0, 0.3 * s, 0, Math.PI * 2); ctx.fill(); }
     ctx.restore();
   }
+  // 지금 비트(설계 보기용 추정): 이 층을 다루는 비트 중 시간 창이 지금과 가장 가까운 것, 없으면 시간 순서
   function currentBeat() {
-    var t = S.gt / 60, acc = 0, bs = S.D.beats;
-    for (var i = 0; i < bs.length; i++) { acc += bs[i].min; if (t < acc) return bs[i]; }
-    return bs[bs.length - 1];
+    var t = S.gt / 60, acc = 0, bs = S.D.beats, best = null, bd = 1e9, byTime = bs[bs.length - 1];
+    for (var i = 0; i < bs.length; i++) {
+      var a = acc, z = acc + bs[i].min; acc = z;
+      if (t >= a && t < z && byTime === bs[bs.length - 1]) byTime = bs[i];
+      if (bs[i].floors.indexOf(S.floor + 'F') < 0) continue;
+      var d = t < a ? a - t : t > z ? t - z : 0;
+      if (d < bd) { bd = d; best = bs[i]; }
+    }
+    return best || byTime;
   }
   function drawHud() {
     var fl = FL[S.floor];
